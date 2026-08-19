@@ -1,0 +1,493 @@
+{
+ "duracion_s": 180.0,
+ "fps": 30.0,
+ "ancho": 1920,
+ "alto": 1080,
+ "narracion": "/home/claude/montador-capcut/ejemplo/narracion.mp3",
+ "bloques": [
+  {
+   "indice": 0,
+   "inicio_s": 0.0,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 1,
+   "inicio_s": 4.7,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco2.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 2,
+   "inicio_s": 9.4,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd3.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 3,
+   "inicio_s": 14.1,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd4.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": "7647004085459225857",
+   "transicion_nombre": "Círculo de fuego",
+   "transicion_duracion_s": 1.467
+  },
+  {
+   "indice": 4,
+   "inicio_s": 18.8,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 5,
+   "inicio_s": 23.5,
+   "duracion_s": 5.223,
+   "clip": "ejemplo/clips/parte1/barco2.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 6,
+   "inicio_s": 28.723,
+   "duracion_s": 5.425,
+   "clip": "ejemplo/clips/parte1/byd3.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 7,
+   "inicio_s": 34.148,
+   "duracion_s": 5.051,
+   "clip": "ejemplo/clips/parte1/byd4.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": "7671182918861032722",
+   "transicion_nombre": "Remolino de gel rosa",
+   "transicion_duracion_s": 2.0
+  },
+  {
+   "indice": 8,
+   "inicio_s": 39.199,
+   "duracion_s": 4.153,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 9.4,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 9,
+   "inicio_s": 43.352,
+   "duracion_s": 4.575,
+   "clip": "ejemplo/clips/parte1/barco2.mp4",
+   "clip_inicio_s": 9.923,
+   "transicion": "6724845717472416269",
+   "transicion_nombre": "Combinar",
+   "transicion_duracion_s": 0.467
+  },
+  {
+   "indice": 10,
+   "inicio_s": 47.927,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte2/barco3.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 11,
+   "inicio_s": 52.627,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte2/explorer1.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 12,
+   "inicio_s": 57.327,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 13.553,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 13,
+   "inicio_s": 62.027,
+   "duracion_s": 4.705,
+   "clip": "ejemplo/clips/parte1/barco2.mp4",
+   "clip_inicio_s": 14.498,
+   "transicion": "7671182918861032722",
+   "transicion_nombre": "Remolino de gel rosa",
+   "transicion_duracion_s": 2.0
+  },
+  {
+   "indice": 14,
+   "inicio_s": 66.732,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd3.mp4",
+   "clip_inicio_s": 10.125,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 15,
+   "inicio_s": 71.432,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd4.mp4",
+   "clip_inicio_s": 9.751,
+   "transicion": "6724845717472416269",
+   "transicion_nombre": "Combinar",
+   "transicion_duracion_s": 0.467
+  },
+  {
+   "indice": 16,
+   "inicio_s": 76.132,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte2/barco3.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 17,
+   "inicio_s": 80.832,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte2/explorer1.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 18,
+   "inicio_s": 85.532,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 18.253,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 19,
+   "inicio_s": 90.232,
+   "duracion_s": 5.567,
+   "clip": "ejemplo/clips/parte2/explorer1.mp4",
+   "clip_inicio_s": 9.4,
+   "transicion": "6724845717472416269",
+   "transicion_nombre": "Combinar",
+   "transicion_duracion_s": 0.467
+  },
+  {
+   "indice": 20,
+   "inicio_s": 95.799,
+   "duracion_s": 4.535,
+   "clip": "ejemplo/clips/parte3/interior1.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 21,
+   "inicio_s": 100.334,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 22.953,
+   "transicion": "7661956939139665173",
+   "transicion_nombre": "Impacto de fuego",
+   "transicion_duracion_s": 1.0
+  },
+  {
+   "indice": 22,
+   "inicio_s": 105.034,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco2.mp4",
+   "clip_inicio_s": 19.203,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 23,
+   "inicio_s": 109.734,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd3.mp4",
+   "clip_inicio_s": 14.825,
+   "transicion": "7671182918861032722",
+   "transicion_nombre": "Remolino de gel rosa",
+   "transicion_duracion_s": 2.0
+  },
+  {
+   "indice": 24,
+   "inicio_s": 114.434,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd4.mp4",
+   "clip_inicio_s": 14.451,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 25,
+   "inicio_s": 119.134,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte2/barco3.mp4",
+   "clip_inicio_s": 9.4,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 26,
+   "inicio_s": 123.834,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte2/explorer1.mp4",
+   "clip_inicio_s": 14.967,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 27,
+   "inicio_s": 128.534,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte3/interior1.mp4",
+   "clip_inicio_s": 4.535,
+   "transicion": "7665629734243503378",
+   "transicion_nombre": "Croma de píxeles",
+   "transicion_duracion_s": 2.0
+  },
+  {
+   "indice": 28,
+   "inicio_s": 133.234,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 29,
+   "inicio_s": 137.934,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte1/byd3.mp4",
+   "clip_inicio_s": 19.525,
+   "transicion": "7647004085459225857",
+   "transicion_nombre": "Círculo de fuego",
+   "transicion_duracion_s": 1.467
+  },
+  {
+   "indice": 30,
+   "inicio_s": 142.634,
+   "duracion_s": 3.801,
+   "clip": "ejemplo/clips/parte1/byd4.mp4",
+   "clip_inicio_s": 19.151,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 31,
+   "inicio_s": 146.435,
+   "duracion_s": 5.494,
+   "clip": "ejemplo/clips/parte2/barco3.mp4",
+   "clip_inicio_s": 14.1,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 32,
+   "inicio_s": 151.929,
+   "duracion_s": 5.56,
+   "clip": "ejemplo/clips/parte2/explorer1.mp4",
+   "clip_inicio_s": 19.667,
+   "transicion": "7667469125362453767",
+   "transicion_nombre": "Mezcla y revelación",
+   "transicion_duracion_s": 2.0
+  },
+  {
+   "indice": 33,
+   "inicio_s": 157.489,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte3/interior1.mp4",
+   "clip_inicio_s": 9.235,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 34,
+   "inicio_s": 162.189,
+   "duracion_s": 4.7,
+   "clip": "ejemplo/clips/parte4/fabrica1.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 35,
+   "inicio_s": 166.889,
+   "duracion_s": 3.817,
+   "clip": "ejemplo/clips/parte4/fabrica2.mp4",
+   "clip_inicio_s": 0.0,
+   "transicion": "7665629734243503378",
+   "transicion_nombre": "Croma de píxeles",
+   "transicion_duracion_s": 2.0
+  },
+  {
+   "indice": 36,
+   "inicio_s": 170.706,
+   "duracion_s": 5.463,
+   "clip": "ejemplo/clips/parte1/barco1.mp4",
+   "clip_inicio_s": 4.7,
+   "transicion": null,
+   "transicion_nombre": null,
+   "transicion_duracion_s": 0.0
+  },
+  {
+   "indice": 37,
+   "inicio_s": 176.169,
+   "duracion_s": 3.831,
+   "clip": "ejemplo/clips/parte1/barco2.mp4",
+   "clip_inicio_s": 23.903,
+   "transicion": "7665566915024260360",
+   "transicion_nombre": "Barrido gelatinoso",
+   "transicion_duracion_s": 2.0
+  }
+ ],
+ "sonidos": [
+  {
+   "inicio_s": 9.4,
+   "duracion_s": 1.2,
+   "nombre": "Fuwa: short wind noise: swipe etc",
+   "bloque": 2
+  },
+  {
+   "inicio_s": 18.8,
+   "duracion_s": 1.2,
+   "nombre": "Fuwa: short wind noise: swipe etc",
+   "bloque": 4
+  },
+  {
+   "inicio_s": 28.723,
+   "duracion_s": 1.2,
+   "nombre": "pop! (tapping the mouth with a hand)(912415)",
+   "bloque": 6
+  },
+  {
+   "inicio_s": 39.199,
+   "duracion_s": 1.2,
+   "nombre": "pop! (tapping the mouth with a hand)(912415)",
+   "bloque": 8
+  },
+  {
+   "inicio_s": 52.158,
+   "duracion_s": 1.2,
+   "nombre": "Fuwa: short wind noise: swipe etc",
+   "bloque": 11
+  },
+  {
+   "inicio_s": 66.732,
+   "duracion_s": 1.2,
+   "nombre": "pop! (tapping the mouth with a hand)(912415)",
+   "bloque": 14
+  },
+  {
+   "inicio_s": 75.605,
+   "duracion_s": 1.2,
+   "nombre": "Glitch sound that matches the sound logo(1192372)",
+   "bloque": 16
+  },
+  {
+   "inicio_s": 85.532,
+   "duracion_s": 1.2,
+   "nombre": "Click_Mouse_Click_02(864360)",
+   "bloque": 18
+  },
+  {
+   "inicio_s": 104.588,
+   "duracion_s": 1.2,
+   "nombre": "pop! (tapping the mouth with a hand)(912415)",
+   "bloque": 22
+  },
+  {
+   "inicio_s": 119.134,
+   "duracion_s": 1.2,
+   "nombre": "pop! (tapping the mouth with a hand)(912415)",
+   "bloque": 25
+  },
+  {
+   "inicio_s": 132.566,
+   "duracion_s": 1.2,
+   "nombre": "Glitch sound that matches the sound logo(1192372)",
+   "bloque": 28
+  },
+  {
+   "inicio_s": 146.435,
+   "duracion_s": 1.2,
+   "nombre": "Fuwa: short wind noise: swipe etc",
+   "bloque": 31
+  },
+  {
+   "inicio_s": 161.356,
+   "duracion_s": 1.2,
+   "nombre": "Fuwa: short wind noise: swipe etc",
+   "bloque": 34
+  },
+  {
+   "inicio_s": 170.111,
+   "duracion_s": 1.2,
+   "nombre": "Fuwa: short wind noise: swipe etc",
+   "bloque": 36
+  }
+ ],
+ "rotulos": [
+  {
+   "inicio_s": 49.26,
+   "duracion_s": 3.0,
+   "textos": [
+    "SE CONFIARON Y CHINA\nEMPEZO A CONSTRUIR SUS PROPIOS BARCOS"
+   ],
+   "plantilla": "TITLE EN - WORLD NEWS"
+  },
+  {
+   "inicio_s": 145.34,
+   "duracion_s": 3.0,
+   "textos": [
+    "China mayor exportador\nde autos"
+   ],
+   "plantilla": "TITLE EN - WORLD NEWS"
+  }
+ ]
+}
