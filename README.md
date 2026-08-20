@@ -24,6 +24,57 @@ FFmpeg: descárgalo de gyan.dev, descomprime y añade la carpeta `bin` al PATH. 
 
 ## Uso
 
+**Lo más cómodo: doble clic en `montar.bat`.** Te pregunta el nombre de la carpeta del vídeo y cuántas partes quieres, la crea dentro de `Escritorio\MasterTube`, la abre en el Explorador y espera. Sueltas dentro la narración, el guion y los clips, pulsas Enter, y monta. Si escribes el nombre de una carpeta que ya existe, la usa tal cual; y si ya está completa, no espera a nada.
+
+```
+  MasterTube : C:\Users\junio\Desktop\MasterTube
+  ya hay     : noveno video, diez video, once video
+
+  Nombre de la carpeta del video: doce video
+  Cuantas partes (parte1...parteN)? [4]: 4
+  Creada     : C:\Users\junio\Desktop\MasterTube\doce video
+               con parte1 ... parte4
+```
+
+La carpeta MasterTube se puede mover con la variable de entorno `MASTERTUBE`.
+
+### El guion lo escribe Claude
+
+Cuando esté esperando material, escribe `guion` en vez de pulsar Enter (o haz doble clic en `guion.bat`). Se abre una ventana: eliges con qué **reglas** escribirlo, pones de qué va el vídeo, los minutos y en cuántas partes, y le das a **Escribir guion**. Las partes van apareciendo según se escriben, las retocas ahí mismo si quieres, y **Guardar guion.txt** lo deja en la carpeta del vídeo. Después pulsas Enter en la consola y el montaje sigue.
+
+#### Las reglas: tus proyectos de Claude, en local
+
+Las instrucciones de un proyecto de claude.ai no se pueden leer desde fuera —no hay API para eso—, así que se copian **una vez** y ya se quedan:
+
+1. En la ventana, dale a **Nuevas...**
+2. Ponle un nombre (el de tu proyecto, por ejemplo) y pega las instrucciones.
+3. **Guardar reglas**.
+
+A partir de ahí las eliges en el desplegable y esas mandan. Se guardan como `.txt` en `MasterTube\perfiles`, así que también puedes crearlas o editarlas ahí a mano. **Ver / editar** abre la que tengas seleccionada.
+
+Tus reglas deciden *cómo* se escribe. El montador solo añade encima lo que necesita para poder leer el guion después: texto plano y las marcas `[TXT: ...]`. En eso no manda el perfil, porque si el guion sale con markdown o sin marcas, el montaje no puede colocar los rótulos.
+
+La primera vez se crea un perfil de ejemplo, `oriente-avanza`, para que tengas de dónde partir.
+
+Sale ya con las marcas `[TXT: ...]` puestas, que es lo que el montador lee para colocar los rótulos.
+
+Habla con Claude de dos formas:
+
+- **Por el CLI de Claude Code** que ya tienes instalado. Es lo que usa por defecto: no hace falta API key ni instalar nada.
+- **Por la API de Anthropic**, como respaldo, si no encuentra el CLI. Para eso sí hacen falta `pip install anthropic` y la variable `ANTHROPIC_API_KEY`.
+
+Si ya había un `guion.txt` en la carpeta, la ventana lo carga al abrirse, y al guardar uno nuevo el anterior se conserva como `guion_anterior.txt`.
+
+### Y la voz, en la misma ventana
+
+Con el guion delante, **Generar voz (Narrador v2)** lo manda a ai33.pro y descarga la narración como `narracion.mp3` en la carpeta del vídeo. Te dice cuántos caracteres va a narrar antes de gastar créditos, y la barra va marcando el progreso.
+
+Las marcas `[TXT: ...]` se quitan antes de mandarlo — si no, el narrador las leería en voz alta. En el `guion.txt` se quedan, que es donde hacen falta para los rótulos.
+
+Con eso la carpeta ya tiene guion y narración; solo faltan los clips en sus `parteN` y el montaje puede seguir.
+
+La clave de ai33.pro se lee de `MasterTube\ai33.key` (o de la variable `AI33_API_KEY`), nunca del código. Si quieres otra voz o otra velocidad: `python -m montador voz --voz <id> --velocidad 1.1`; los ids salen de `GET /v3/voices?provider=fishaudio`. Un `narracion.mp3` anterior se guarda en la subcarpeta `anteriores`.
+
 Organiza el material así:
 
 ```
@@ -46,7 +97,9 @@ python -m montador montar --clips "C:\ruta\a\noveno video" --proyecto noveno_aut
 
 La narración y el guion se detectan solos dentro de esa carpeta: el único archivo de audio que haya, y el `.txt` (preferiblemente `guion.txt`). La transcripción se guarda como `trans.json` ahí mismo y se reutiliza sola en las siguientes pasadas.
 
-En Windows, más fácil todavía: **arrastra la carpeta del vídeo encima de `montar.bat`**. No hay que escribir nada.
+`--proyecto` se puede omitir: por defecto es el nombre de la carpeta sin espacios y con `_auto` detrás. El `edl.json` se guarda también en la carpeta del vídeo.
+
+En Windows, si la carpeta ya está hecha: **arrástrala encima de `montar.bat`**. No hay que escribir nada.
 
 Si quieres indicarlo todo a mano:
 

@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 ejemplo/borradores/
 *.mp4.tmp
+*.key

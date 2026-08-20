@@ -20,6 +20,7 @@ from pathlib import Path
 
 from . import alineacion as al
 from . import edl as edl_mod
+from . import proyecto as proy
 from .config import ESTILO
 from .capcut.escritor import EscritorCapCut
 
@@ -37,7 +38,7 @@ def borradores_por_defecto() -> Path:
     return Path.cwd() / "borradores"
 
 
-EXT_AUDIO = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
+EXT_AUDIO = proy.EXTENSIONES_AUDIO
 
 
 def autodetectar(args) -> None:
@@ -102,6 +103,11 @@ def _alinear(args) -> al.Alineacion:
 
 
 def _construir_edl(args) -> edl_mod.EDL:
+    if not args.clips:
+        # sin --clips se pregunta por el nombre y se trabaja dentro de
+        # MasterTube: es el camino del doble clic en montar.bat
+        args.clips = str(proy.preparar())
+        print()
     autodetectar(args)
     a = _alinear(args)
     pausas = a.calcular_pausas(ESTILO.corte.pausa_minima_s)
@@ -146,6 +152,23 @@ def cmd_edl(args):
 
 
 def cmd_montar(args):
+    if not args.clips:
+        # se adelanta a _construir_edl para que las preguntas salgan antes
+        # del "1/3" y no en mitad del proceso
+        args.clips = str(proy.preparar())
+        print()
+
+    carpeta_video = Path(args.clips)
+    if not args.proyecto:
+        args.proyecto = proy.nombre_proyecto(carpeta_video)
+    if not args.guardar_edl:
+        # junto al material: es lo que permite comparar despues el montaje
+        # generado con la version retocada a mano
+        args.guardar_edl = str(carpeta_video / "edl.json")
+
+    print(f"     carpeta  : {carpeta_video}")
+    print(f"     proyecto : {args.proyecto}")
+    print()
     print("1/3  alineando narracion")
     e = _construir_edl(args)
     print()
@@ -168,6 +191,58 @@ def cmd_montar(args):
           f"'{args.proyecto}' en la lista de borradores.")
 
 
+def cmd_guion(args):
+    if args.clips:
+        carpeta = Path(args.clips)
+        if not carpeta.exists():
+            raise RuntimeError(f"No existe la carpeta {carpeta}")
+    else:
+        # aqui no se espera a que la carpeta este llena: el guion es
+        # justamente una de las cosas que aun no estan dentro
+        carpeta, _ = proy.preguntar_carpeta()
+
+    from .ui_guion import escribir_guion
+    destino = escribir_guion(carpeta, args.partes, args.reglas)
+
+    if destino:
+        print(f"Guion guardado en {destino}")
+    else:
+        print("No se ha guardado ningun guion.")
+
+
+def cmd_voz(args):
+    from . import voz
+
+    if args.clips:
+        carpeta = Path(args.clips)
+        if not carpeta.exists():
+            raise RuntimeError(f"No existe la carpeta {carpeta}")
+    else:
+        carpeta, _ = proy.preguntar_carpeta()
+
+    guiones = [p for p in carpeta.iterdir()
+               if p.is_file() and p.suffix.lower() == ".txt"
+               and p.stem.lower() not in ("trans", "guion_anterior")]
+    preferido = [p for p in guiones if p.stem.lower() == "guion"]
+    elegido = (preferido or guiones or [None])[0]
+    if not elegido:
+        raise RuntimeError(f"No hay ningun guion .txt en {carpeta}")
+
+    texto = voz.texto_locutable(elegido.read_text(encoding="utf-8"))
+    print(f"  guion    : {elegido.name} ({len(texto)} caracteres)")
+    print(f"  voz      : {args.voz or voz.NOMBRE_VOZ}")
+    print(f"  creditos : {voz.creditos()}")
+    print()
+
+    destino = voz.narrar(
+        elegido.read_text(encoding="utf-8"), carpeta,
+        voz=args.voz, velocidad=args.velocidad,
+        avance=lambda pct, est: print(f"  {est} {pct} %"))
+
+    print()
+    print(f"Narracion guardada en {destino}")
+
+
 def cmd_render(args):
     from .render import render_ffmpeg
     e = edl_mod.EDL.cargar(Path(args.edl))
@@ -187,8 +262,10 @@ def main(argv=None):
                        help="audio de la locucion. Si se omite, se busca el "
                             "unico archivo de audio dentro de --clips")
         if con_clips:
-            p.add_argument("--clips", required=True,
-                           help="carpeta con subcarpetas parte1, parte2, ...")
+            p.add_argument("--clips",
+                           help="carpeta con subcarpetas parte1, parte2, ... "
+                                "Si se omite, se pregunta el nombre y se "
+                                "trabaja dentro de MasterTube")
             p.add_argument("--guion", help="guion con marcas [TXT: ...]")
             p.add_argument("--entradas",
                            help="segundos en que entra cada parte, "
@@ -221,8 +298,9 @@ def main(argv=None):
 
     p = sub.add_parser("montar", help="EDL + borrador de CapCut")
     comunes(p)
-    p.add_argument("--proyecto", required=True,
-                   help="nombre del borrador que veras en CapCut")
+    p.add_argument("--proyecto",
+                   help="nombre del borrador que veras en CapCut "
+                        "(por defecto, el de la carpeta + _auto)")
     p.add_argument("--borradores",
                    help="carpeta de borradores de CapCut "
                         "(por defecto se detecta sola en Windows)")
@@ -233,6 +311,27 @@ def main(argv=None):
                         "'music' = audio importado (por defecto). Si CapCut "
                         "no carga el audio, prueba 'extract_music'")
     p.set_defaults(func=cmd_montar)
+
+    p = sub.add_parser("guion", help="escribir el guion con Claude")
+    p.add_argument("--clips",
+                   help="carpeta del video. Si se omite, se pregunta el "
+                        "nombre dentro de MasterTube")
+    p.add_argument("--partes", type=int, default=0,
+                   help="en cuantas partes se escribe (por defecto, tantas "
+                        "como carpetas parteN haya)")
+    p.add_argument("--reglas", default="",
+                   help="perfil de reglas a usar, de MasterTube\\perfiles")
+    p.set_defaults(func=cmd_guion)
+
+    p = sub.add_parser("voz", help="narrar el guion con ai33.pro")
+    p.add_argument("--clips",
+                   help="carpeta del video. Si se omite, se pregunta el "
+                        "nombre dentro de MasterTube")
+    p.add_argument("--voz", default="",
+                   help="id de voz de ai33.pro (por defecto, Narrador v2)")
+    p.add_argument("--velocidad", type=float, default=0.0,
+                   help="0.5 a 1.5 (por defecto 1.0)")
+    p.set_defaults(func=cmd_voz)
 
     p = sub.add_parser("render", help="renderizar un EDL con ffmpeg")
     p.add_argument("--edl", required=True)
