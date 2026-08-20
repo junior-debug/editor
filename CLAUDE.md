@@ -159,6 +159,43 @@ sale siempre a cero. Lo que vale es contar los bloques `tool_use` de la
 transcripción que Claude Code deja en
 `~\.claude\projects\<ruta-codificada>\<sesion>.jsonl`.
 
+### Qué clips buscar
+
+Al terminar el guion, `PEDIR_CLIPS` pide en la **misma conversación** las
+búsquedas para ilustrarlo. En la misma a propósito: ahí Claude ya tiene el
+guion entero delante, con sus cifras y sus rótulos, y no hay que volver a
+contárselo.
+
+Vuelven en un bloque `---CLIPS---` … `---FIN---` con una cabecera `PARTE N`
+por sección. Es el mismo truco que el guion y por el mismo motivo: separar lo
+que es dato de lo que es charla. `extraer_busquedas()` lo lee y `atajos()` ni
+se entera, porque su marca lleva la palabra CLIPS y no GUION.
+
+El lector es deliberadamente tolerante: acepta `INTRO Y PARTE 1` —que es como
+las agrupa el usuario a mano—, quita viñetas, numeración y comillas, y si
+Claude se dejó las marcas pero puso las cabeceras, lee igual. Perder la lista
+entera por un delimitador ausente sería absurdo teniendo el contenido delante.
+
+`guardar_busquedas()` las escribe **dentro de cada `parteN`**, nunca sueltas
+en la raíz, y por dos razones:
+
+- Práctica: el día que abras `parte3` para llenarla, la lista está ahí mismo.
+- Técnica: en la raíz, cualquier `.txt` que no sea `trans` puede acabar
+  tomándose por el guion (`cli.py`, autodetección). Dentro de `parteN` solo
+  cuentan las extensiones de vídeo, así que un `.txt` es inofensivo.
+
+Aun así, `busquedas` está excluido por nombre en la autodetección y en
+`revisar()`, porque el caso sin carpetas `parteN` sí escribe en la raíz. Si un
+día se cambia el nombre del archivo, hay que cambiarlo en los tres sitios.
+
+Si el guion tiene más partes que carpetas —cinco partes contra cuatro
+`parteN`, que es lo normal hoy—, las que sobran se suman al final de la
+última. Tenerlas de más en un sitio raro es mejor que perderlas.
+
+Lo que se guarda y lo que se abre en el navegador sale de **lo que haya en la
+pestaña**, no de lo que dijo Claude: las búsquedas se retocan, se prueba una,
+no da nada y se cambia una palabra.
+
 ### El modo de un tirón sigue ahí
 
 `generar()` y `guion --auto "<tema>"` escriben el guion entero sin preguntar
@@ -293,13 +330,15 @@ identificadores de biblioteca.
     montador/
       config.py            el estilo, en números
       proyecto.py          carpeta de trabajo en MasterTube: preguntar nombre,
-                           crear parte1..parteN, comprobar que está completa
+                           crear parte1..parteN, comprobar que está completa,
+                           repartir las busquedas de clips por parteN
       guionista.py         guion negociado con Claude por turnos (Conversacion)
                            + modo de un tiron para perfiles sin pasos
       perfiles.py          reglas de guion del usuario (MasterTube\perfiles)
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
-      ui_guion.py          ventana (tkinter): chat con Claude, atajos y la
-                           pestana Guion donde se acumula lo locutable
+      ui_guion.py          ventana (tkinter): chat con Claude, atajos, la
+                           pestana Guion con lo locutable y la pestana
+                           Clips con que buscar para cada parteN
       alineacion.py        whisper -> palabras -> pausas (+ registro de DLL de CUDA en Windows)
       edl.py               plan de cortes, rotacion de clips, transiciones, sonidos, rotulos
       capcut/escritor.py   EDL -> draft_content.json + draft_meta_info.json

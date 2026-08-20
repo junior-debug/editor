@@ -24,13 +24,19 @@ from __future__ import annotations
 import queue
 import threading
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import messagebox, ttk
+from urllib.parse import quote_plus
 
 from . import guionista as gui
 from . import perfiles as perf
 from . import proyecto as proy
 from . import voz
+
+# Busqueda de YouTube. Se deja a la vista para poder cambiarla: hay dias en
+# que el material bueno esta en otro sitio.
+BUSCADOR = "https://www.youtube.com/results?search_query={}"
 
 PISTA_INICIAL = ("Escribe de qué va el vídeo y dale a Enviar. "
                  "A partir de ahí, Claude lleva la conversación.")
@@ -119,6 +125,8 @@ class VentanaGuion:
         self.guion = self._panel_texto(self.pestanas, editable=True)
         self.pestanas.add(self.guion.master, text="Guion")
 
+        self.pestanas.add(self._panel_clips(self.pestanas), text="Clips")
+
         self.charla.tag_configure("tu", foreground="#1a4f8a",
                                   font=("Segoe UI", 10, "bold"),
                                   spacing1=10, spacing3=2)
@@ -179,6 +187,59 @@ class VentanaGuion:
             self.guion.insert("1.0", existente.read_text(encoding="utf-8"))
             self._decir("Cargado el guion.txt que ya habia. "
                         "Escribe el tema para empezar otro.")
+
+    def _panel_clips(self, padre) -> ttk.Frame:
+        """
+        Que buscar para ilustrar cada parte.
+
+        Es texto editable y no una lista cerrada porque las busquedas se
+        retocan: se prueba una, no da nada, se cambia una palabra. Lo que se
+        guarda y lo que se abre en el navegador sale de lo que haya aqui, no
+        de lo que dijo Claude.
+        """
+        marco = ttk.Frame(padre)
+        marco.columnconfigure(0, weight=1)
+        marco.rowconfigure(1, weight=1)
+
+        arriba = ttk.Frame(marco, padding=(8, 8, 8, 4))
+        arriba.grid(row=0, column=0, sticky="ew")
+        arriba.columnconfigure(2, weight=1)
+
+        self.boton_clips = ttk.Button(
+            arriba, text="Pedir las busquedas a Claude",
+            command=self._pedir_clips)
+        self.boton_clips.grid(row=0, column=0)
+
+        ttk.Button(arriba, text="Guardar en las carpetas parteN",
+                   command=self._guardar_clips).grid(row=0, column=1,
+                                                     padx=(6, 0))
+
+        caja = ttk.Frame(marco)
+        caja.grid(row=1, column=0, sticky="nsew", padx=8)
+        caja.columnconfigure(0, weight=1)
+        caja.rowconfigure(0, weight=1)
+
+        self.clips = tk.Text(caja, wrap="none", undo=True, padx=8, pady=6,
+                             font=("Consolas", 10))
+        self.clips.grid(row=0, column=0, sticky="nsew")
+        barra_v = ttk.Scrollbar(caja, orient="vertical",
+                                command=self.clips.yview)
+        barra_v.grid(row=0, column=1, sticky="ns")
+        barra_h = ttk.Scrollbar(caja, orient="horizontal",
+                                command=self.clips.xview)
+        barra_h.grid(row=1, column=0, sticky="ew")
+        self.clips.configure(yscrollcommand=barra_v.set,
+                             xscrollcommand=barra_h.set)
+
+        abajo = ttk.Frame(marco, padding=(8, 6, 8, 8))
+        abajo.grid(row=2, column=0, sticky="ew")
+        ttk.Label(abajo, text="Abrir en el navegador:").pack(side="left",
+                                                             padx=(0, 8))
+        self.barra_partes = ttk.Frame(abajo)
+        self.barra_partes.pack(side="left")
+
+        self._pintar_botones_partes()
+        return marco
 
     def _panel_texto(self, padre, editable: bool) -> tk.Text:
         caja = ttk.Frame(padre)
@@ -454,6 +515,16 @@ class VentanaGuion:
         self.barra.stop()
         self.boton_enviar.state(["!disabled"])
 
+        # las busquedas se apartan antes: no son guion ni son charla, y en el
+        # chat solo estorbarian
+        busquedas, respuesta = gui.extraer_busquedas(respuesta)
+        if busquedas:
+            self._recibir_clips(busquedas)
+            cuantas = sum(len(v) for v in busquedas.values())
+            self._escribir_charla(
+                f"[{cuantas} busquedas en {len(busquedas)} partes "
+                f"-> pestaña Clips]", "nota")
+
         bloques, charla = gui.extraer_guion(respuesta)
 
         if charla:
@@ -466,13 +537,79 @@ class VentanaGuion:
                 f"[{cuantos} de guion, {palabras} palabras -> pestaña Guion]",
                 "nota")
             self._sumar_al_guion(bloques)
-        elif not charla:
+        elif not charla and not busquedas:
             # respuesta rara: mejor ensenarla cruda que tragarsela
             self._escribir_charla(respuesta, "claude")
 
         self._pintar_atajos(gui.atajos(charla))
         self._decir(self._resumen_guion())
         self.mensaje.focus_set()
+
+    # ----------------------------------------------------------------
+    # Clips
+    # ----------------------------------------------------------------
+
+    def _busquedas_actuales(self) -> dict[int, list[str]]:
+        return gui.leer_busquedas(self.clips.get("1.0", "end-1c"))
+
+    def _pintar_botones_partes(self) -> None:
+        for hijo in self.barra_partes.winfo_children():
+            hijo.destroy()
+        for numero in sorted(self._busquedas_actuales()):
+            ttk.Button(self.barra_partes, text=f"Parte {numero}",
+                       width=9,
+                       command=lambda n=numero: self._abrir_busquedas(n),
+                       ).pack(side="left", padx=(0, 4))
+
+    def _pedir_clips(self) -> None:
+        if self.trabajando:
+            return
+        if self.conversacion is None:
+            messagebox.showinfo(
+                "Todavia no",
+                "Las busquedas salen del guion, asi que primero hay que "
+                "escribirlo. Empieza la conversacion en la otra pestaña.")
+            return
+        if self.clips.get("1.0", "end-1c").strip() and not messagebox.askyesno(
+                "Ya hay busquedas",
+                "Se van a sustituir las que hay ahora. Sigo?"):
+            return
+        self._enviar(gui.PEDIR_CLIPS)
+
+    def _recibir_clips(self, busquedas: dict[int, list[str]]) -> None:
+        self.clips.delete("1.0", "end")
+        self.clips.insert("1.0", gui.texto_busquedas(busquedas))
+        self._pintar_botones_partes()
+        self.pestanas.select(2)
+
+    def _abrir_busquedas(self, numero: int) -> None:
+        terminos = self._busquedas_actuales().get(numero, [])
+        if not terminos:
+            return
+        if len(terminos) > 3 and not messagebox.askyesno(
+                "Abrir el navegador",
+                f"Se van a abrir {len(terminos)} pestañas con las busquedas "
+                f"de la parte {numero}.\n\nSigo?"):
+            return
+        for termino in terminos:
+            webbrowser.open_new_tab(BUSCADOR.format(quote_plus(termino)))
+        self._decir(f"Abiertas {len(terminos)} busquedas de la parte "
+                    f"{numero}.")
+
+    def _guardar_clips(self) -> None:
+        busquedas = self._busquedas_actuales()
+        if not busquedas:
+            messagebox.showwarning(
+                "Vacio",
+                "No hay busquedas que guardar. Tienen que ir con su cabecera: "
+                "una linea 'PARTE 1' y debajo las busquedas, una por linea.")
+            return
+
+        escritos = proy.guardar_busquedas(self.carpeta, busquedas)
+        cuantas = sum(len(v) for v in busquedas.values())
+        donde = ", ".join(sorted(p.parent.name for p in escritos))
+        self._decir(f"{cuantas} busquedas guardadas en {donde}.")
+        self._pintar_botones_partes()
 
     # ----------------------------------------------------------------
     # Guardado

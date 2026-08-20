@@ -72,6 +72,49 @@ def partes_de(destino: Path) -> list[Path]:
         key=lambda d: int(re.search(r"\d+", d.name).group()))
 
 
+def guardar_busquedas(destino: Path,
+                      busquedas: dict[int, list[str]]) -> list[Path]:
+    """
+    Escribe las busquedas dentro de la parteN que les toca.
+
+    Van en la subcarpeta y no sueltas en la raiz por una razon practica: el
+    dia que abras parte3 para llenarla, la lista esta ahi mismo. Y por una
+    tecnica: en la raiz, un .txt de mas puede acabar tomandose por el guion,
+    mientras que dentro de parteN solo cuentan los videos.
+
+    Si el guion tiene mas partes que carpetas, las que sobran se suman al
+    final de la ultima: mejor tenerlas de mas en un sitio raro que perderlas.
+    """
+    if not busquedas:
+        return []
+
+    carpetas = partes_de(destino)
+    reparto: dict[Path, list[int]] = {}
+
+    for numero in sorted(busquedas):
+        if carpetas:
+            cual = carpetas[min(numero, len(carpetas)) - 1]
+        else:
+            # sin parteN no hay donde meterlas; a la raiz, con un nombre que
+            # la deteccion del guion sabe esquivar
+            cual = destino
+        reparto.setdefault(cual, []).append(numero)
+
+    escritos = []
+    for carpeta, numeros in reparto.items():
+        trozo = {n: busquedas[n] for n in numeros}
+        ruta = carpeta / "busquedas.txt"
+        ruta.write_text(_texto_busquedas(trozo) + "\n", encoding="utf-8")
+        escritos.append(ruta)
+    return escritos
+
+
+def _texto_busquedas(busquedas: dict[int, list[str]]) -> str:
+    # importacion perezosa: guionista importa este modulo indirectamente
+    from .guionista import texto_busquedas
+    return texto_busquedas(busquedas)
+
+
 def nombre_proyecto(destino: Path) -> str:
     """Nombre del borrador en CapCut: el de la carpeta, sin espacios, + _auto."""
     return destino.name.replace(" ", "_") + "_auto"
@@ -125,7 +168,7 @@ def revisar(destino: Path) -> tuple[list[str], list[str]]:
 
     guiones = [p for p in destino.iterdir()
                if p.is_file() and p.suffix.lower() == ".txt"
-               and p.stem.lower() != "trans"]
+               and p.stem.lower() not in ("trans", "busquedas")]
     if not guiones:
         avisos.append("no hay guion .txt: el montaje saldra sin rotulos")
 

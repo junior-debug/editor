@@ -96,6 +96,27 @@ Para reglas que son solo estilo, sin pasos que seguir, está el modo de un tiró
 
 Con un perfil por pasos como `oriente-avanza` no sirve: se los saltaría.
 
+### Qué clips buscar, parte por parte
+
+Con el guion terminado, la pestaña **Clips** y el botón **Pedir las busquedas a Claude**. Como está en la misma conversación, ya sabe de qué va cada parte: no hay que explicárselo otra vez.
+
+Devuelve entre seis y diez búsquedas por parte, de lo más específico a lo más genérico — los nombres propios y los términos en el idioma original primero, el relleno al final:
+
+    PARTE 1
+    Long March 10B first stage recovery full video
+    CZ-10B 长征十号乙 回收
+    Long March 10B net capture Linghang Zhe
+    China rocket caught in net at sea CGTN
+
+Dos botones y ya:
+
+- **Abrir en el navegador → Parte 1** abre cada búsqueda en su pestaña. Si son más de tres, avisa antes.
+- **Guardar en las carpetas parteN** deja un `busquedas.txt` **dentro de cada carpeta**. Así, cuando abras `parte3` para llenarla de clips, la lista está ahí mismo.
+
+El texto es editable: pruebas una búsqueda, no da nada, cambias una palabra. Lo que se guarda y lo que se abre es lo que tengas en pantalla, no lo que dijo Claude.
+
+Si el guion tiene cinco partes y solo creaste cuatro carpetas, las búsquedas de la quinta se suman al `busquedas.txt` de la última.
+
 ### Y la voz, en la misma ventana
 
 Con el guion delante, **Generar voz (Narrador v2)** lo manda a ai33.pro y descarga la narración como `narracion.mp3` en la carpeta del vídeo. Te dice cuántos caracteres va a narrar antes de gastar créditos, y la barra va marcando el progreso.

@@ -111,6 +111,38 @@ escritos [TXT: TEXTO DEL RÓTULO], máximo seis palabras y en mayúsculas. Es \
 la única sintaxis especial permitida dentro del guion.
 """
 
+# Lo que se le pide al terminar el guion: que diga que buscar para ilustrarlo.
+# Va en la misma conversacion a proposito — ahi tiene el guion entero delante,
+# con sus cifras y sus rotulos, y no hay que volver a contarselo.
+PEDIR_CLIPS = """\
+Ya está el guion. Ahora dime qué vídeos busco para ilustrarlo.
+
+Para cada parte, entre seis y diez búsquedas: lo que yo escribiría tal cual \
+en el buscador para encontrar el plano. No me describas lo que se ve —"plano \
+aéreo de un cohete" no me sirve—, dame la búsqueda: nombres propios, siglas, \
+el término en el idioma del país cuando ayude a encontrar el material \
+original, y el año si es de una fecha concreta.
+
+Ordena cada parte de lo más específico a lo más genérico: primero lo que \
+solo vale para este vídeo, y al final dos o tres de relleno que sirvan para \
+cualquier plano de apoyo de esa parte.
+
+Devuélvelo en un bloque con esta forma exacta:
+
+---CLIPS---
+PARTE 1
+la primera búsqueda
+la segunda búsqueda
+
+PARTE 2
+la primera búsqueda de la parte 2
+---FIN---
+
+Dentro del bloque, una búsqueda por línea y nada más: sin numerar, sin \
+guiones delante, sin comillas y sin explicar para qué sirve cada una. Fuera \
+del bloque dime lo que quieras.
+"""
+
 # Reglas de estilo usadas cuando no se pasa ningun perfil. El sitio donde el
 # usuario las mantiene es MasterTube\\perfiles; ver perfiles.py.
 ESTILO_POR_DEFECTO = """\
@@ -358,6 +390,63 @@ def extraer_guion(respuesta: str) -> tuple[list[str], str]:
 # la linea, con una etiqueta en mayusculas opcional delante. Sin re.I a
 # proposito: la etiqueta tiene que ir en mayusculas para no confundir un
 # "Párrafo 1 — ..." con una opcion.
+_RE_CLIPS = re.compile(
+    r"^[ \t]*-{2,}[ \t]*CLIPS[ \t]*-{2,}[ \t]*$(.*?)"
+    r"^[ \t]*-{2,}[ \t]*FIN[ \t]*-{2,}[ \t]*$",
+    re.S | re.M | re.I)
+
+# "PARTE 1", "Parte 2:", y tambien "INTRO Y PARTE 1", que es como las agrupa
+# el usuario a mano cuando la intro va pegada a la primera parte
+_RE_CABECERA = re.compile(
+    r"^[ \t]*(?:INTRO[ \t]*(?:Y|\+|/|,)?[ \t]*)?PARTE[ \t]*(\d{1,2})"
+    r"[ \t]*:?[ \t]*$",
+    re.M | re.I)
+
+
+def leer_busquedas(texto: str) -> dict[int, list[str]]:
+    """
+    Convierte "PARTE 1 / busqueda / busqueda / PARTE 2 / ..." en un diccionario.
+
+    Lee el texto plano, sin marcas, para poder aplicarse tambien a lo que el
+    usuario haya retocado a mano en la ventana.
+    """
+    cabeceras = list(_RE_CABECERA.finditer(texto))
+    if not cabeceras:
+        return {}
+
+    busquedas: dict[int, list[str]] = {}
+    for i, cab in enumerate(cabeceras):
+        fin = cabeceras[i + 1].start() if i + 1 < len(cabeceras) else len(texto)
+        numero = int(cab.group(1))
+        lineas = []
+        for linea in texto[cab.end():fin].splitlines():
+            # se limpian las viñetas y la numeracion por si las cuela igual
+            linea = linea.strip().lstrip("-•*").strip()
+            linea = re.sub(r"^\d{1,2}[\.\)]\s*", "", linea).strip(' "\'')
+            if linea:
+                lineas.append(linea)
+        if lineas:
+            busquedas.setdefault(numero, []).extend(lineas)
+    return busquedas
+
+
+def extraer_busquedas(respuesta: str) -> tuple[dict[int, list[str]], str]:
+    """
+    Separa la respuesta en (busquedas por parte, lo que Claude nos dice).
+
+    Si se olvido las marcas pero puso las cabeceras, se lee igual: perder la
+    lista entera por un delimitador que falta seria absurdo cuando el
+    contenido esta ahi delante.
+    """
+    encontrado = _RE_CLIPS.search(respuesta)
+    if encontrado:
+        return (leer_busquedas(encontrado.group(1)),
+                _RE_CLIPS.sub("\n", respuesta).strip())
+
+    sueltas = leer_busquedas(respuesta)
+    return (sueltas, "" if sueltas else respuesta)
+
+
 _RE_OPCION = re.compile(
     r"^[ \t]*(?:(?:[Oo]pci[oó]n|[Vv]ersi[oó]n|[A-ZÁÉÍÓÚÑ]{4,})[ \t]+)?"
     r"([A-Ca-c1-9])[ \t]*(?:[\)\.\:\-–—·]|\()",
@@ -496,6 +585,14 @@ def generar(tema: str, minutos: float, partes: int = 4, backend: str = "",
         if avance:
             avance(i, partes, texto)
     return escritas
+
+
+def texto_busquedas(busquedas: dict[int, list[str]]) -> str:
+    """Las busquedas otra vez en texto, tal y como se leen y se guardan."""
+    trozos = []
+    for numero in sorted(busquedas):
+        trozos.append(f"PARTE {numero}\n" + "\n".join(busquedas[numero]))
+    return "\n\n".join(trozos)
 
 
 def unir(partes: list[str]) -> str:

@@ -69,7 +69,7 @@ def autodetectar(args) -> None:
     if not getattr(args, "guion", None):
         candidatos = [p for p in raiz.iterdir()
                       if p.is_file() and p.suffix.lower() == ".txt"
-                      and p.stem.lower() != "trans"]
+                      and p.stem.lower() not in ("trans", "busquedas")]
         preferido = [p for p in candidatos if p.stem.lower() == "guion"]
         elegido = (preferido or candidatos or [None])[0]
         if elegido:
