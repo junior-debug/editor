@@ -55,6 +55,16 @@ Debajo del chat aparecen **botones de atajo** con lo que toque responder: si te 
 
 **Empezar de cero** olvida la conversación pero **no** borra el guion que ya has recogido.
 
+#### Investiga antes de escribir
+
+Claude tiene **buscador** mientras escribe el guion: comprueba las cifras, las fechas y los nombres propios, y si el tema sigue vivo busca el dato reciente en vez de tirar de lo que recuerde. Los turnos en los que busca tardan más — es el precio de que las cifras sean de verdad.
+
+Las fuentes te las cita en la conversación, **no** dentro del guion: ahí no pintan nada porque no se locutan.
+
+Solo se le abren la búsqueda y la lectura de páginas. No toca los archivos de tu carpeta.
+
+Si algún dato no lo ha podido confirmar, te lo dice en una línea aparte en vez de colarlo como si tal cosa.
+
 #### Las reglas: tus proyectos de Claude, en local
 
 Las instrucciones de un proyecto de claude.ai no se pueden leer desde fuera —no hay API para eso—, así que se copian **una vez** y ya se quedan:

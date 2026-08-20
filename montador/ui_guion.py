@@ -388,7 +388,7 @@ class VentanaGuion:
         self.trabajando = True
         self.boton_enviar.state(["disabled"])
         self.barra.start(12)
-        self._decir("Claude esta escribiendo...")
+        self._decir("Claude esta escribiendo. Si busca datos, tarda mas.")
 
         threading.Thread(target=self._trabajar, args=(texto,),
                          daemon=True).start()

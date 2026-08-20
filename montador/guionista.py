@@ -37,6 +37,26 @@ MODELO_API = "claude-opus-5"
 # el CLI puede tardar bastante en una parte larga; mejor esperar que cortar
 ESPERA_MAXIMA_S = 600
 
+# Lo unico que se le deja tocar al CLI. Sin esto no busca: en modo -p no hay
+# nadie que acepte el dialogo de permisos, asi que las llamadas se rechazan
+# solas. Y se le abren estas dos y nada mas: no tiene por que leer ni escribir
+# archivos en la carpeta del video.
+HERRAMIENTAS_WEB = ["WebSearch", "WebFetch"]
+
+# El permiso solo no basta. Con las herramientas concedidas pero sin encargo,
+# Claude escribe de memoria igualmente. Esto no es estilo ni formato, asi que
+# no va en ninguno de los dos contratos: va aparte, y solo con el backend del
+# CLI, que es el unico que tiene herramientas.
+INVESTIGAR = """\
+Tienes búsqueda web y quiero que la uses antes de escribir. Comprueba las \
+cifras, las fechas y los nombres propios que vayas a soltar, y si el tema \
+sigue vivo busca el dato más reciente en vez de tirar de lo que recuerdes.
+
+Las fuentes no se locutan: no las metas dentro del guion. Si te apetece \
+citarlas, hazlo fuera, hablando conmigo. Y si un dato no has podido \
+confirmarlo, dímelo en una línea aparte en vez de colarlo como si nada.
+"""
+
 # Marcas con las que Claude separa lo que se locuta de lo que nos dice a
 # nosotros. Sin ellas no se puede conversar y armar el guion a la vez: las
 # tres opciones de hook y los "¿seguimos?" acabarian dentro del mp3.
@@ -156,6 +176,8 @@ def _lanzar_cli(prompt: str, trabajo: Path | None,
     sesion; de paso trae el aviso de error explicito.
     """
     orden = [ruta_cli(), "-p", prompt, "--output-format", "json"]
+    if HERRAMIENTAS_WEB:
+        orden += ["--allowedTools", *HERRAMIENTAS_WEB]
     if sesion:
         orden += ["--resume", sesion]
 
@@ -259,11 +281,14 @@ class Conversacion:
         # el contrato va detras de las reglas del usuario, no delante: lo
         # ultimo que se lee es lo que mejor se respeta, y el formato no es
         # negociable
-        return "\n\n".join([
-            self.reglas,
-            CONTRATO_CONVERSACION,
-            f"Tema del vídeo:\n{tema.strip()}",
-        ])
+        capas = [self.reglas]
+        if self.backend == "cli":
+            # el respaldo por API no lleva herramientas: alli el encargo
+            # seria pedirle algo que no puede hacer
+            capas.append(INVESTIGAR)
+        capas += [CONTRATO_CONVERSACION,
+                  f"Tema del vídeo:\n{tema.strip()}"]
+        return "\n\n".join(capas)
 
     def enviar(self, texto: str) -> str:
         """Manda un turno y devuelve la respuesta cruda, con sus marcas."""
@@ -396,11 +421,15 @@ def atajos(charla: str) -> list[tuple[str, str]]:
 # --------------------------------------------------------------------------
 
 def _prompt_parte(tema: str, palabras: int, parte: int, total: int,
-                  previas: list[str], reglas: str = "") -> str:
+                  previas: list[str], reglas: str = "",
+                  investigar: bool = False) -> str:
     # el contrato va detras de las reglas del usuario, no delante: lo ultimo
     # que se lee es lo que mejor se respeta, y el formato no es negociable
-    partes = [reglas.strip() or ESTILO_POR_DEFECTO, "", CONTRATO_FORMATO, "",
-              f"Tema del vídeo:\n{tema.strip()}", ""]
+    partes = [reglas.strip() or ESTILO_POR_DEFECTO, ""]
+    if investigar:
+        partes += [INVESTIGAR, ""]
+    partes += [CONTRATO_FORMATO, "",
+               f"Tema del vídeo:\n{tema.strip()}", ""]
 
     if previas:
         escrito = "\n\n".join(previas)
@@ -460,7 +489,8 @@ def generar(tema: str, minutos: float, partes: int = 4, backend: str = "",
     escritas: list[str] = []
     for i in range(1, partes + 1):
         texto = pedir(
-            _prompt_parte(tema, por_parte, i, partes, escritas, reglas),
+            _prompt_parte(tema, por_parte, i, partes, escritas, reglas,
+                          investigar=backend == "cli"),
             backend=backend, trabajo=trabajo)
         escritas.append(texto)
         if avance:

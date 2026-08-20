@@ -129,6 +129,36 @@ Las reglas van en el **primer mensaje**, no en un system prompt: es lo que ya
 estaba comprobado que funciona, y de ahí en adelante siguen delante de Claude
 porque la sesión entera se conserva.
 
+### Investiga antes de escribir
+
+El CLI se lanza con `--allowedTools WebSearch WebFetch`. Hacen falta **las dos
+cosas**, y es un error fácil de cometer dejarse una:
+
+- Sin el permiso, las llamadas se rechazan solas. En modo `-p` no hay nadie
+  que acepte el diálogo, así que Claude contesta que no tiene la herramienta
+  concedida.
+- Sin el encargo (`INVESTIGAR`), no busca aunque pueda. Comprobado: en la
+  primera conversación real, con las herramientas ya disponibles, no tocó ni
+  una y escribió de memoria.
+
+`INVESTIGAR` no es estilo ni formato, así que no va en ninguno de los dos
+contratos: va aparte, entre las reglas y el contrato, y **solo con el backend
+del CLI** — el respaldo por API no lleva herramientas y allí el encargo sería
+pedirle algo que no puede hacer.
+
+Se le abren esas dos herramientas y ninguna más. No tiene por qué leer ni
+escribir archivos en la carpeta del vídeo, y se ejecuta dentro de ella.
+
+Que las fuentes **no entren en el guion** lo dice el propio encargo: se citan
+fuera, hablando, que es donde no se locutan. Si un día aparecen URLs dentro de
+un bloque `---GUION---`, se arregla ahí y no con un filtro después.
+
+Para comprobar si de verdad buscó no sirve `usage.server_tool_use` de la
+respuesta: el `WebSearch` del CLI no es herramienta de servidor y ese contador
+sale siempre a cero. Lo que vale es contar los bloques `tool_use` de la
+transcripción que Claude Code deja en
+`~\.claude\projects\<ruta-codificada>\<sesion>.jsonl`.
+
 ### El modo de un tirón sigue ahí
 
 `generar()` y `guion --auto "<tema>"` escriben el guion entero sin preguntar
