@@ -38,9 +38,22 @@ FFmpeg: descárgalo de gyan.dev, descomprime y añade la carpeta `bin` al PATH. 
 
 La carpeta MasterTube se puede mover con la variable de entorno `MASTERTUBE`.
 
-### El guion lo escribe Claude
+### El guion lo escribe Claude, hablando contigo
 
-Cuando esté esperando material, escribe `guion` en vez de pulsar Enter (o haz doble clic en `guion.bat`). Se abre una ventana: eliges con qué **reglas** escribirlo, pones de qué va el vídeo, los minutos y en cuántas partes, y le das a **Escribir guion**. Las partes van apareciendo según se escriben, las retocas ahí mismo si quieres, y **Guardar guion.txt** lo deja en la carpeta del vídeo. Después pulsas Enter en la consola y el montaje sigue.
+Cuando esté esperando material, escribe `guion` en vez de pulsar Enter (o haz doble clic en `guion.bat`). Se abre una ventana de chat: eliges con qué **reglas** escribirlo, escribes de qué va el vídeo, y a partir de ahí lo lleva Claude.
+
+Si tus reglas trabajan por pasos, la conversación va sola: te propone tres hooks y se para, eliges, pasa al contexto, y así hasta la última parte. **No escribe el guion entero de golpe** — te va preguntando, igual que en claude.ai.
+
+La ventana tiene dos pestañas y conviene no confundirlas:
+
+- **Conversación** — lo que Claude te dice: las opciones, las preguntas, sus comentarios.
+- **Guion** — solo el texto que se va a locutar. Es lo único que acaba en `guion.txt` y en el mp3.
+
+Claude separa una cosa de otra y la ventana va acumulando en la pestaña Guion cada trozo bueno según llega. Puedes editarlo ahí mismo. **Guardar guion.txt** lo deja en la carpeta del vídeo, y después pulsas Enter en la consola para que el montaje siga.
+
+Debajo del chat aparecen **botones de atajo** con lo que toque responder: si te ofrece tres opciones salen `A` `B` `C` y un `Otra vuelta`; si te pregunta si sigue con la parte siguiente, sale `Parte 2`. Son un atajo, no una jaula: la caja de texto sigue ahí para pedirle lo que quieras («cambia el hook», «esa cifra no me cuadra», «alarga la parte 3»). Enter manda, Shift+Enter hace párrafo.
+
+**Empezar de cero** olvida la conversación pero **no** borra el guion que ya has recogido.
 
 #### Las reglas: tus proyectos de Claude, en local
 
@@ -52,11 +65,11 @@ Las instrucciones de un proyecto de claude.ai no se pueden leer desde fuera —n
 
 A partir de ahí las eliges en el desplegable y esas mandan. Se guardan como `.txt` en `MasterTube\perfiles`, así que también puedes crearlas o editarlas ahí a mano. **Ver / editar** abre la que tengas seleccionada.
 
-Tus reglas deciden *cómo* se escribe. El montador solo añade encima lo que necesita para poder leer el guion después: texto plano y las marcas `[TXT: ...]`. En eso no manda el perfil, porque si el guion sale con markdown o sin marcas, el montaje no puede colocar los rótulos.
+Van dentro del primer mensaje de la conversación, así que se eligen **antes de escribir el tema**: cambiar el desplegable a media charla no cambia nada, vale para la siguiente.
+
+Tus reglas deciden *cómo* se escribe y con qué mecánica. El montador solo añade encima lo que necesita para poder leer el guion después: texto plano y las marcas `[TXT: ...]`. En eso no manda el perfil, porque si el guion sale con markdown o sin marcas, el montaje no puede colocar los rótulos.
 
 La primera vez se crea un perfil de ejemplo, `oriente-avanza`, para que tengas de dónde partir.
-
-Sale ya con las marcas `[TXT: ...]` puestas, que es lo que el montador lee para colocar los rótulos.
 
 Habla con Claude de dos formas:
 
@@ -64,6 +77,14 @@ Habla con Claude de dos formas:
 - **Por la API de Anthropic**, como respaldo, si no encuentra el CLI. Para eso sí hacen falta `pip install anthropic` y la variable `ANTHROPIC_API_KEY`.
 
 Si ya había un `guion.txt` en la carpeta, la ventana lo carga al abrirse, y al guardar uno nuevo el anterior se conserva como `guion_anterior.txt`.
+
+#### Si prefieres no hablar
+
+Para reglas que son solo estilo, sin pasos que seguir, está el modo de un tirón: escribe el guion entero por consola, sin ventana y sin preguntar nada.
+
+    python -m montador guion --clips "C:\ruta\al video" --auto "de qué va el vídeo" --minutos 13
+
+Con un perfil por pasos como `oriente-avanza` no sirve: se los saltaría.
 
 ### Y la voz, en la misma ventana
 

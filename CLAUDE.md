@@ -54,10 +54,13 @@ prototipo de un proyecto real; no lo inventes.
 
 Al cambiar el estilo, tocar `config.py`, no la lógica.
 
-## El guion lo escribe Claude
+## El guion lo escribe Claude, hablando
 
-`guionista.py` genera el guion por partes encadenadas: cada parte recibe las
-anteriores enteras, que es lo que mantiene el hilo sin repetir datos.
+`guionista.py` no escupe el guion de un tirón: lo negocia por turnos, porque
+así es como trabaja el usuario. Claude propone tres hooks y se para; el
+usuario elige; Claude pasa al paso siguiente; y así hasta la última parte.
+`Conversacion` es la clase que lleva ese hilo, y `ui_guion.py` la envuelve en
+un chat.
 
 **Las reglas de estilo son del usuario, no del código.** Vienen de sus
 proyectos de claude.ai, y como las instrucciones de un proyecto de claude.ai
@@ -68,27 +71,70 @@ aplicación. Si alguien retoma esto buscando "conectar con el proyecto de
 Claude": no se puede, y el puente manual de una sola vez es la solución, no
 un parche.
 
-El prompt se compone en dos capas, y el orden importa:
+Las reglas de hoy (`oriente-avanza`) no son solo estilo: son un **protocolo**.
+Fase A, la intro en cinco pasos, uno por mensaje. Fase B, cinco partes, una
+por mensaje, seis párrafos cada una salvo la quinta. Por eso el montador no
+puede limitarse a pedir texto — tiene que dejar hablar a Claude y esperar.
 
-1. las reglas del perfil elegido (o `ESTILO_POR_DEFECTO` si no hay ninguno),
-2. `CONTRATO_FORMATO`, que va **siempre y al final**.
+### Los dos contratos de formato
 
-El perfil manda en el estilo; el contrato solo impone el formato que el
-montador necesita para leer el guion (texto plano y marcas `[TXT: ...]`), y
-va detrás porque lo último que se lee es lo que mejor se respeta. Está
-comprobado: con un perfil que prohíbe las cifras —justo lo contrario de lo
-que pide el estilo de fábrica— el guion sale sin una sola cifra y con sus
-marcas de rótulo intactas.
+El prompt se compone en dos capas y el orden importa: primero las reglas del
+perfil (o `ESTILO_POR_DEFECTO`), después el contrato, **siempre al final**,
+porque lo último que se lee es lo que mejor se respeta. El perfil manda en el
+estilo; el contrato solo impone el formato que el montador necesita.
 
-Dos backends, con la misma lógica detrás:
+Hay dos contratos porque hay dos modos, y confundirlos rompe el otro:
+
+- `CONTRATO_FORMATO` — el del modo de un tirón. Exige *solo el texto del
+  guion, sin comentarios tuyos*.
+- `CONTRATO_CONVERSACION` — el del chat. Ahí no se puede exigir eso: sería
+  prohibir justo lo que las reglas del usuario piden, que pregunte y espere.
+  En vez de callarlo, se le pide que **separe**: lo que se locuta va envuelto
+  entre `---GUION---` y `---FIN---`, y todo lo demás —opciones, preguntas,
+  avisos— va fuera.
+
+Ese delimitador es lo que sostiene la ventana entera. Sin él no se puede
+conversar y armar el guion a la vez, y las tres opciones de hook acabarían
+dentro del mp3. `extraer_guion()` lo lee y devuelve `(bloques, charla)`: los
+bloques se acumulan en la pestaña Guion, la charla se pinta en el chat.
+
+El contrato dice además que **solo se envuelve lo definitivo**. Importa: la
+intro del PASO 5 no es guion final —la Parte 1 la despliega en prosa—, así que
+se queda fuera de las marcas y no entra dos veces.
+
+`atajos()` mira lo que Claude acaba de decir y saca los botones: si ofrece
+opciones etiquetadas, salen `A` `B` `C` y un "Otra vuelta"; si pregunta por
+una parte, sale `Parte N`; si pregunta cualquier otra cosa, `Adelante`. Se
+deduce del texto, no de las reglas, **a propósito**: así la ventana no sabe
+que existen "5 pasos" ni "5 partes" y sigue sirviendo si el usuario reescribe
+su perfil mañana.
+
+### Los backends
 
 - **CLI** (`claude -p`), el de por defecto. Usa la instalación de Claude Code
   que el usuario ya tiene autenticada: sin API key y sin dependencias. Se
   ejecuta con `cwd` en la carpeta del vídeo **a propósito**: desde la carpeta
   del montador, Claude Code cargaría este CLAUDE.md y escribiría el guion con
   todo este contexto encima.
-- **API** (SDK `anthropic`, modelo `claude-opus-5`), respaldo. Se importa
-  dentro de la función, así que solo hay que instalarlo si se usa de verdad.
+
+  El hilo se mantiene con `--resume <session_id>`, no reenviando la
+  conversación en cada prompt. Por eso la salida se pide en `--output-format
+  json`: el `session_id` sale de ahí. Comprobado que el turno siguiente se
+  sirve de caché.
+- **API** (SDK `anthropic`, modelo `claude-opus-5`), respaldo. Ahí el
+  historial sí se lleva a mano en `Conversacion.mensajes`. Se importa dentro
+  de la función, así que solo hay que instalarlo si se usa de verdad.
+
+Las reglas van en el **primer mensaje**, no en un system prompt: es lo que ya
+estaba comprobado que funciona, y de ahí en adelante siguen delante de Claude
+porque la sesión entera se conserva.
+
+### El modo de un tirón sigue ahí
+
+`generar()` y `guion --auto "<tema>"` escriben el guion entero sin preguntar
+nada, con `CONTRATO_FORMATO`. Es para perfiles que solo son reglas de estilo,
+sin mecánica por pasos. Con un perfil como el de hoy no sirve: se saltaría los
+pasos.
 
 El guion sale en texto plano y con las marcas `[TXT: ...]` que `edl.py` ya
 sabe leer: no hay ningún paso de limpieza entre una cosa y la otra, y no
@@ -218,15 +264,18 @@ identificadores de biblioteca.
       config.py            el estilo, en números
       proyecto.py          carpeta de trabajo en MasterTube: preguntar nombre,
                            crear parte1..parteN, comprobar que está completa
-      guionista.py         guion escrito por Claude, por partes encadenadas
+      guionista.py         guion negociado con Claude por turnos (Conversacion)
+                           + modo de un tiron para perfiles sin pasos
       perfiles.py          reglas de guion del usuario (MasterTube\perfiles)
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
-      ui_guion.py          ventana (tkinter) para escribirlo y retocarlo
+      ui_guion.py          ventana (tkinter): chat con Claude, atajos y la
+                           pestana Guion donde se acumula lo locutable
       alineacion.py        whisper -> palabras -> pausas (+ registro de DLL de CUDA en Windows)
       edl.py               plan de cortes, rotacion de clips, transiciones, sonidos, rotulos
       capcut/escritor.py   EDL -> draft_content.json + draft_meta_info.json
       render.py            EDL -> MP4 con ffmpeg (borrador rapido y plan B)
-      cli.py               montar / edl / alinear / render + autodeteccion de entradas
+      cli.py               montar / guion / voz / edl / alinear / render
+                           + autodeteccion de entradas
     herramientas/
       extraer_prototipos.py  draft real -> plantillas/prototipos_*.json
       analizar_estilo.py     metricas de estilo de cualquier draft
@@ -243,6 +292,7 @@ identificadores de biblioteca.
     python -m montador montar
     python -m montador montar --clips "C:\ruta\al video" --proyecto nombre
     python -m montador guion  --clips "C:\ruta\al video"
+    python -m montador guion  --clips "..." --auto "tema" --minutos 13
     python -m montador voz    --clips "C:\ruta\al video"
     python -m montador edl    --clips ... -o edl.json
     python -m montador render --edl edl.json -o borrador.mp4 --borrador

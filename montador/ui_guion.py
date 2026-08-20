@@ -1,10 +1,23 @@
 """
-Ventana para escribir el guion con Claude.
+Ventana para escribir el guion hablando con Claude.
 
-Tkinter viene con Python, asi que no anade dependencias. La generacion corre
-en un hilo aparte y se comunica por cola: si se llamara a Claude desde el hilo
-de la ventana, esta se quedaria congelada varios minutos y Windows la marcaria
-como "no responde".
+Es un chat, no un formulario, porque las reglas del usuario son un protocolo
+de conversacion: Claude propone tres hooks, el elige, Claude pasa al siguiente
+paso, y asi hasta la ultima parte. Un boton de "escribir guion" no puede
+hacer eso.
+
+Dos cosas conviven en la ventana y no hay que mezclarlas:
+
+  la charla   lo que Claude nos dice: opciones, preguntas, avisos.
+  el guion    solo lo que se va a locutar, que es lo unico que acaba en
+              guion.txt y en el mp3.
+
+Las separa Claude con las marcas del contrato, y las lee extraer_guion(). Si
+no fuera asi, el narrador leeria en voz alta las tres opciones de hook.
+
+Tkinter viene con Python, asi que no anade dependencias. Las llamadas corren
+en un hilo aparte y se comunican por cola: desde el hilo de la ventana, esta
+se quedaria congelada minutos y Windows la marcaria como "no responde".
 """
 from __future__ import annotations
 
@@ -19,7 +32,8 @@ from . import perfiles as perf
 from . import proyecto as proy
 from . import voz
 
-MINUTOS_POR_DEFECTO = 13
+PISTA_INICIAL = ("Escribe de qué va el vídeo y dale a Enviar. "
+                 "A partir de ahí, Claude lleva la conversación.")
 
 
 class VentanaGuion:
@@ -30,13 +44,13 @@ class VentanaGuion:
         self.cola: queue.Queue = queue.Queue()
         self.trabajando = False
         self.tarea = None
-        # aviso fijo que el contador de palabras no debe pisar
-        self.nota = ""
+        self.conversacion: gui.Conversacion | None = None
+        self.bloques = 0          # trozos de guion recibidos, para el estado
 
         self.raiz = tk.Tk()
         self.raiz.title(f"Guion — {self.carpeta.name}")
-        self.raiz.geometry("860x680")
-        self.raiz.minsize(640, 480)
+        self.raiz.geometry("900x740")
+        self.raiz.minsize(700, 520)
 
         try:
             self.backend = gui.detectar_backend()
@@ -45,7 +59,7 @@ class VentanaGuion:
             self.raiz.after(100, lambda: messagebox.showerror(
                 "Sin conexion con Claude", str(exc)))
 
-        self._construir(partes)
+        self._construir()
         # el sondeo de la cola queda pendiente: hay que cancelarlo al cerrar o
         # Tk intenta ejecutarlo sobre widgets que ya no existen
         self.tarea = self.raiz.after(120, self._vaciar_cola)
@@ -61,11 +75,11 @@ class VentanaGuion:
     # Montaje de la ventana
     # ----------------------------------------------------------------
 
-    def _construir(self, partes: int) -> None:
+    def _construir(self) -> None:
         marco = ttk.Frame(self.raiz, padding=12)
         marco.pack(fill="both", expand=True)
         marco.columnconfigure(0, weight=1)
-        marco.rowconfigure(5, weight=1)
+        marco.rowconfigure(2, weight=1)
 
         cabecera = ttk.Frame(marco)
         cabecera.grid(row=0, column=0, sticky="ew")
@@ -78,7 +92,7 @@ class VentanaGuion:
                   foreground="#555").grid(row=0, column=1, sticky="e")
 
         reglas = ttk.Frame(marco)
-        reglas.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        reglas.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         reglas.columnconfigure(1, weight=1)
 
         ttk.Label(reglas, text="Reglas:").grid(row=0, column=0, sticky="w")
@@ -91,57 +105,68 @@ class VentanaGuion:
                                                      padx=(6, 0))
         self._refrescar_perfiles(elegir=self.perfil_inicial)
 
-        ttk.Label(marco, text="De que va el video:").grid(
-            row=2, column=0, sticky="w", pady=(12, 2))
+        # Las reglas se congelan en el primer turno: van dentro del primer
+        # mensaje, asi que cambiarlas a mitad no cambiaria nada y solo
+        # confundiria.
+        self.perfil.bind("<<ComboboxSelected>>", self._al_cambiar_perfil)
 
-        self.tema = tk.Text(marco, height=5, wrap="word", undo=True)
-        self.tema.grid(row=3, column=0, sticky="ew")
-        self.tema.insert("1.0", "")
-        self.tema.focus_set()
+        self.pestanas = ttk.Notebook(marco)
+        self.pestanas.grid(row=2, column=0, sticky="nsew", pady=(10, 0))
 
-        opciones = ttk.Frame(marco)
-        opciones.grid(row=4, column=0, sticky="ew", pady=10)
+        self.charla = self._panel_texto(self.pestanas, editable=False)
+        self.pestanas.add(self.charla.master, text="Conversacion")
 
-        ttk.Label(opciones, text="Minutos:").pack(side="left")
-        self.minutos = ttk.Spinbox(opciones, from_=1, to=90, width=5)
-        self.minutos.set(MINUTOS_POR_DEFECTO)
-        self.minutos.pack(side="left", padx=(4, 16))
+        self.guion = self._panel_texto(self.pestanas, editable=True)
+        self.pestanas.add(self.guion.master, text="Guion")
 
-        ttk.Label(opciones, text="Partes:").pack(side="left")
-        self.partes = ttk.Spinbox(opciones, from_=1, to=12, width=5)
-        self.partes.set(max(1, partes))
-        self.partes.pack(side="left", padx=(4, 16))
+        self.charla.tag_configure("tu", foreground="#1a4f8a",
+                                  font=("Segoe UI", 10, "bold"),
+                                  spacing1=10, spacing3=2)
+        self.charla.tag_configure("claude", font=("Segoe UI", 10),
+                                  spacing3=4)
+        self.charla.tag_configure("nota", foreground="#767676",
+                                  font=("Segoe UI", 9, "italic"),
+                                  spacing1=4, spacing3=8)
+        self.guion.bind("<<Modified>>", self._al_editar_guion)
 
-        self.boton_generar = ttk.Button(opciones, text="Escribir guion",
-                                        command=self._generar)
-        self.boton_generar.pack(side="left")
+        # barra de atajos: se rellena con lo que Claude acabe de proponer
+        self.barra_atajos = ttk.Frame(marco)
+        self.barra_atajos.grid(row=3, column=0, sticky="ew", pady=(8, 0))
 
-        self.barra = ttk.Progressbar(opciones, mode="determinate", length=160)
-        self.barra.pack(side="left", padx=12)
+        entrada = ttk.Frame(marco)
+        entrada.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+        entrada.columnconfigure(0, weight=1)
 
-        caja = ttk.Frame(marco)
-        caja.grid(row=5, column=0, sticky="nsew")
-        caja.columnconfigure(0, weight=1)
-        caja.rowconfigure(0, weight=1)
+        self.mensaje = tk.Text(entrada, height=4, wrap="word", undo=True,
+                               font=("Segoe UI", 10))
+        self.mensaje.grid(row=0, column=0, sticky="ew")
+        self.mensaje.focus_set()
+        # Enter manda, Shift+Enter hace parrafo: es lo que espera cualquiera
+        # que haya escrito en un chat alguna vez
+        self.mensaje.bind("<Return>", self._al_pulsar_enter)
+        self.mensaje.bind("<Shift-Return>", lambda e: None)
 
-        self.texto = tk.Text(caja, wrap="word", undo=True,
-                             font=("Consolas", 10))
-        self.texto.grid(row=0, column=0, sticky="nsew")
-        barra_v = ttk.Scrollbar(caja, orient="vertical",
-                                command=self.texto.yview)
-        barra_v.grid(row=0, column=1, sticky="ns")
-        self.texto.configure(yscrollcommand=barra_v.set)
-        self.texto.bind("<<Modified>>", self._al_editar)
+        lado = ttk.Frame(entrada)
+        lado.grid(row=0, column=1, sticky="ns", padx=(8, 0))
+        self.boton_enviar = ttk.Button(lado, text="Enviar",
+                                       command=self._enviar)
+        self.boton_enviar.pack(fill="x")
+        self.boton_reiniciar = ttk.Button(lado, text="Empezar de cero",
+                                          command=self._reiniciar)
+        self.boton_reiniciar.pack(fill="x", pady=(6, 0))
+
+        self.barra = ttk.Progressbar(marco, mode="indeterminate")
+        self.barra.grid(row=5, column=0, sticky="ew", pady=(8, 0))
 
         pie = ttk.Frame(marco)
-        pie.grid(row=6, column=0, sticky="ew", pady=(10, 0))
+        pie.grid(row=6, column=0, sticky="ew", pady=(8, 0))
         pie.columnconfigure(0, weight=1)
 
-        self.estado = ttk.Label(pie, text="Escribe el tema y dale a "
-                                          "'Escribir guion'.")
+        self.estado = ttk.Label(pie, text=PISTA_INICIAL)
         self.estado.grid(row=0, column=0, sticky="w")
 
-        self.boton_voz = ttk.Button(pie, text=f"Generar voz ({voz.NOMBRE_VOZ})",
+        self.boton_voz = ttk.Button(pie,
+                                    text=f"Generar voz ({voz.NOMBRE_VOZ})",
                                     command=self._generar_voz)
         self.boton_voz.grid(row=0, column=1, sticky="e", padx=(0, 6))
 
@@ -151,9 +176,40 @@ class VentanaGuion:
 
         existente = self.carpeta / "guion.txt"
         if existente.exists():
-            self.texto.insert("1.0", existente.read_text(encoding="utf-8"))
-            self.nota = "Cargado el guion.txt que ya habia. "
-            self._al_editar()
+            self.guion.insert("1.0", existente.read_text(encoding="utf-8"))
+            self._decir("Cargado el guion.txt que ya habia. "
+                        "Escribe el tema para empezar otro.")
+
+    def _panel_texto(self, padre, editable: bool) -> tk.Text:
+        caja = ttk.Frame(padre)
+        caja.columnconfigure(0, weight=1)
+        caja.rowconfigure(0, weight=1)
+
+        texto = tk.Text(caja, wrap="word", undo=True, padx=8, pady=6,
+                        font=("Consolas", 10) if editable
+                        else ("Segoe UI", 10))
+        texto.grid(row=0, column=0, sticky="nsew")
+        barra_v = ttk.Scrollbar(caja, orient="vertical", command=texto.yview)
+        barra_v.grid(row=0, column=1, sticky="ns")
+        texto.configure(yscrollcommand=barra_v.set)
+        if not editable:
+            # Solo lectura, pero ni muda ni quieta: con state="disabled" no se
+            # podria copiar ni moverse por el texto, que es justo lo que se
+            # quiere hacer en una transcripcion. Se bloquea la escritura y se
+            # dejan pasar los atajos (Ctrl) y las teclas de navegacion.
+            texto.bind("<Key>", self._solo_lectura)
+        return texto
+
+    NAVEGACION = frozenset((
+        "Up", "Down", "Left", "Right", "Prior", "Next", "Home", "End",
+        "Shift_L", "Shift_R", "Control_L", "Control_R", "Tab"))
+
+    def _solo_lectura(self, evento):
+        if evento.state & 0x4:              # Ctrl: copiar, seleccionar todo
+            return None
+        if evento.keysym in self.NAVEGACION:
+            return None
+        return "break"
 
     # ----------------------------------------------------------------
     # Perfiles de reglas
@@ -166,6 +222,11 @@ class VentanaGuion:
             self.perfil.set(elegir)
         elif not self.perfil.get() and disponibles:
             self.perfil.set(disponibles[0])
+
+    def _al_cambiar_perfil(self, _evento=None) -> None:
+        if self.conversacion:
+            self._decir("Las reglas ya estan puestas en esta conversacion; "
+                        "el cambio vale para la siguiente.")
 
     def _reglas_elegidas(self) -> str:
         nombre = self.perfil.get()
@@ -190,7 +251,7 @@ class VentanaGuion:
         """
         top = tk.Toplevel(self.raiz)
         top.title("Reglas del guion")
-        top.geometry("720x560")
+        top.geometry("760x600")
         top.transient(self.raiz)
         top.grab_set()
 
@@ -246,19 +307,58 @@ class VentanaGuion:
     def _decir(self, mensaje: str) -> None:
         self.estado.configure(text=mensaje)
 
-    def _al_editar(self, _evento=None) -> None:
-        self.texto.edit_modified(False)
-        palabras = len(self.texto.get("1.0", "end-1c").split())
-        if palabras and not self.trabajando:
-            minutos = palabras / gui.PALABRAS_POR_MINUTO
-            self._decir(f"{self.nota}{palabras} palabras, unos "
-                        f"{minutos:.1f} min de locucion.")
+    def _resumen_guion(self) -> str:
+        texto = self.guion.get("1.0", "end-1c")
+        palabras = len(texto.split())
+        if not palabras:
+            return "El guion esta vacio."
+        minutos = palabras / gui.PALABRAS_POR_MINUTO
+        rotulos = texto.count("[TXT:")
+        return (f"Guion: {palabras} palabras, unos {minutos:.1f} min "
+                f"de locucion, {rotulos} rotulos.")
+
+    def _al_editar_guion(self, _evento=None) -> None:
+        self.guion.edit_modified(False)
+        if not self.trabajando:
+            self._decir(self._resumen_guion())
 
     # ----------------------------------------------------------------
-    # Generacion
+    # Escritura en los paneles
     # ----------------------------------------------------------------
 
-    def _generar(self) -> None:
+    def _escribir_charla(self, texto: str, marca: str) -> None:
+        self.charla.insert("end", texto.rstrip() + "\n", marca)
+        self.charla.see("end")
+
+    def _sumar_al_guion(self, bloques: list[str]) -> None:
+        for bloque in bloques:
+            if self.guion.get("1.0", "end-1c").strip():
+                self.guion.insert("end", "\n\n")
+            self.guion.insert("end", bloque.strip())
+            self.bloques += 1
+        self.guion.see("end")
+        self.guion.edit_modified(False)
+
+    def _pintar_atajos(self, botones: list[tuple[str, str]]) -> None:
+        for hijo in self.barra_atajos.winfo_children():
+            hijo.destroy()
+        if not botones:
+            return
+        for etiqueta, envio in botones:
+            ttk.Button(
+                self.barra_atajos, text=etiqueta,
+                command=lambda t=envio: self._enviar(t),
+            ).pack(side="left", padx=(0, 6))
+
+    # ----------------------------------------------------------------
+    # Conversacion
+    # ----------------------------------------------------------------
+
+    def _al_pulsar_enter(self, _evento):
+        self._enviar()
+        return "break"       # sin esto, Tk mete ademas el salto de linea
+
+    def _enviar(self, texto: str = "") -> None:
         if self.trabajando:
             return
         if not self.backend:
@@ -266,93 +366,82 @@ class VentanaGuion:
                                  "No hay ni CLI de Claude ni API key.")
             return
 
-        tema = self.tema.get("1.0", "end-1c").strip()
-        if not tema:
-            messagebox.showwarning("Falta el tema",
-                                   "Escribe de que va el video.")
+        texto = (texto or self.mensaje.get("1.0", "end-1c")).strip()
+        if not texto:
             return
 
-        if self.texto.get("1.0", "end-1c").strip():
-            if not messagebox.askyesno(
-                    "Ya hay texto",
-                    "Se va a sustituir el guion que hay ahora. Sigo?"):
+        if self.conversacion is None:
+            try:
+                reglas = self._reglas_elegidas()
+            except RuntimeError as exc:
+                messagebox.showerror("Reglas", str(exc))
                 return
+            self.conversacion = gui.Conversacion(
+                reglas=reglas, backend=self.backend, trabajo=self.carpeta)
+            self._escribir_charla(
+                f"— reglas: {self.perfil.get()} —", "nota")
 
-        try:
-            minutos = float(self.minutos.get())
-            partes = int(self.partes.get())
-        except ValueError:
-            messagebox.showwarning("Numeros",
-                                   "Minutos y partes tienen que ser numeros.")
-            return
+        self.mensaje.delete("1.0", "end")
+        self._pintar_atajos([])
+        self._escribir_charla(f"Tú: {texto}", "tu")
 
-        try:
-            reglas = self._reglas_elegidas()
-        except RuntimeError as exc:
-            messagebox.showerror("Reglas", str(exc))
-            return
-
-        self.nota = ""
         self.trabajando = True
-        self.boton_generar.state(["disabled"])
-        self.texto.delete("1.0", "end")
-        self.barra.configure(maximum=partes, value=0)
-        self._decir(f"Escribiendo la parte 1 de {partes} "
-                    f"con las reglas '{self.perfil.get()}'...")
+        self.boton_enviar.state(["disabled"])
+        self.barra.start(12)
+        self._decir("Claude esta escribiendo...")
 
-        hilo = threading.Thread(
-            target=self._trabajar, args=(tema, minutos, partes, reglas),
-            daemon=True)
-        hilo.start()
+        threading.Thread(target=self._trabajar, args=(texto,),
+                         daemon=True).start()
 
-    def _trabajar(self, tema: str, minutos: float, partes: int,
-                  reglas: str) -> None:
+    def _trabajar(self, texto: str) -> None:
         """Corre en el hilo secundario: aqui no se toca ningun widget."""
         try:
-            gui.generar(
-                tema, minutos, partes, backend=self.backend,
-                trabajo=self.carpeta, reglas=reglas,
-                avance=lambda n, t, texto: self.cola.put(("parte", n, t, texto)))
-            self.cola.put(("fin", 0, 0, ""))
+            respuesta = self.conversacion.enviar(texto)
+            self.cola.put(("respuesta", 0, respuesta))
         except Exception as exc:
-            self.cola.put(("error", 0, 0, str(exc)))
+            self.cola.put(("error", 0, str(exc)))
+
+    def _reiniciar(self) -> None:
+        if self.trabajando:
+            return
+        if self.conversacion and not messagebox.askyesno(
+                "Empezar de cero",
+                "Se olvida la conversacion con Claude. El guion que ya has "
+                "recogido se queda como esta.\n\nSigo?"):
+            return
+        self.conversacion = None
+        self.charla.delete("1.0", "end")
+        self._pintar_atajos([])
+        self._decir(PISTA_INICIAL)
+        self.mensaje.focus_set()
+
+    # ----------------------------------------------------------------
+    # Cola
+    # ----------------------------------------------------------------
 
     def _vaciar_cola(self) -> None:
         try:
             while True:
-                clase, n, total, texto = self.cola.get_nowait()
+                clase, numero, texto = self.cola.get_nowait()
 
-                if clase == "parte":
-                    if self.texto.get("1.0", "end-1c").strip():
-                        self.texto.insert("end", "\n\n")
-                    self.texto.insert("end", texto.strip())
-                    self.texto.see("end")
-                    self.barra.configure(value=n)
-                    if n < total:
-                        self._decir(f"Escribiendo la parte {n + 1} "
-                                    f"de {total}...")
-
-                elif clase == "fin":
-                    self.trabajando = False
-                    self.boton_generar.state(["!disabled"])
-                    self._al_editar()
+                if clase == "respuesta":
+                    self._recibir(texto)
 
                 elif clase == "voz":
-                    self.barra.configure(value=n)
-                    self._decir(f"Narrando... {n} % ({texto})")
+                    self._decir(f"Narrando... {numero} % ({texto})")
 
                 elif clase == "voz-fin":
                     self.trabajando = False
+                    self.barra.stop()
                     self.boton_voz.state(["!disabled"])
-                    self.boton_generar.state(["!disabled"])
-                    self.barra.configure(value=100)
+                    self.boton_enviar.state(["!disabled"])
                     self._decir(f"Narracion guardada en {Path(texto).name}")
 
                 elif clase == "error":
                     self.trabajando = False
-                    self.boton_generar.state(["!disabled"])
+                    self.barra.stop()
+                    self.boton_enviar.state(["!disabled"])
                     self.boton_voz.state(["!disabled"])
-                    self.barra.configure(value=0)
                     self._decir("Ha fallado.")
                     messagebox.showerror("No ha salido", texto)
         except queue.Empty:
@@ -360,21 +449,50 @@ class VentanaGuion:
 
         self.tarea = self.raiz.after(120, self._vaciar_cola)
 
+    def _recibir(self, respuesta: str) -> None:
+        self.trabajando = False
+        self.barra.stop()
+        self.boton_enviar.state(["!disabled"])
+
+        bloques, charla = gui.extraer_guion(respuesta)
+
+        if charla:
+            self._escribir_charla(charla, "claude")
+        if bloques:
+            palabras = sum(len(b.split()) for b in bloques)
+            cuantos = ("1 trozo" if len(bloques) == 1
+                       else f"{len(bloques)} trozos")
+            self._escribir_charla(
+                f"[{cuantos} de guion, {palabras} palabras -> pestaña Guion]",
+                "nota")
+            self._sumar_al_guion(bloques)
+        elif not charla:
+            # respuesta rara: mejor ensenarla cruda que tragarsela
+            self._escribir_charla(respuesta, "claude")
+
+        self._pintar_atajos(gui.atajos(charla))
+        self._decir(self._resumen_guion())
+        self.mensaje.focus_set()
+
     # ----------------------------------------------------------------
     # Guardado
     # ----------------------------------------------------------------
 
     def _guardar(self) -> None:
-        texto = self.texto.get("1.0", "end-1c").strip()
+        texto = self.guion.get("1.0", "end-1c").strip()
         if not texto:
-            messagebox.showwarning("Vacio", "No hay nada que guardar.")
+            messagebox.showwarning(
+                "Vacio", "No hay guion que guardar. Lo que Claude te dice "
+                         "en la conversacion no cuenta como guion: solo "
+                         "cuenta lo que aparece en la pestaña Guion.")
             return
 
         destino = gui.guardar(self.carpeta, texto + "\n")
         self.guardado = destino
 
         marcas = texto.count("[TXT:")
-        cuenta = "1 rotulo marcado" if marcas == 1 else f"{marcas} rotulos marcados"
+        cuenta = ("1 rotulo marcado" if marcas == 1
+                  else f"{marcas} rotulos marcados")
         self._decir(f"Guardado en {destino.name}, con {cuenta}.")
 
     # ----------------------------------------------------------------
@@ -385,7 +503,7 @@ class VentanaGuion:
         if self.trabajando:
             return
 
-        texto = self.texto.get("1.0", "end-1c").strip()
+        texto = self.guion.get("1.0", "end-1c").strip()
         if not texto:
             messagebox.showwarning("Vacio", "No hay guion que narrar.")
             return
@@ -411,8 +529,8 @@ class VentanaGuion:
 
         self.trabajando = True
         self.boton_voz.state(["disabled"])
-        self.boton_generar.state(["disabled"])
-        self.barra.configure(maximum=100, value=0)
+        self.boton_enviar.state(["disabled"])
+        self.barra.start(12)
         self._decir("Enviando el guion a ai33.pro...")
 
         threading.Thread(target=self._trabajar_voz, args=(texto,),
@@ -423,10 +541,10 @@ class VentanaGuion:
         try:
             destino = voz.narrar(
                 texto, self.carpeta,
-                avance=lambda pct, est: self.cola.put(("voz", pct, 0, est)))
-            self.cola.put(("voz-fin", 0, 0, str(destino)))
+                avance=lambda pct, est: self.cola.put(("voz", pct, est)))
+            self.cola.put(("voz-fin", 0, str(destino)))
         except Exception as exc:
-            self.cola.put(("error", 0, 0, str(exc)))
+            self.cola.put(("error", 0, str(exc)))
 
     def abrir(self) -> Path | None:
         self.raiz.mainloop()
@@ -438,10 +556,8 @@ def escribir_guion(carpeta: Path, partes: int = 0,
     """
     Abre la ventana y devuelve la ruta del guion si se ha guardado.
 
-    Por defecto propone tantas partes de guion como carpetas parteN haya:
-    es el reparto que luego usa el EDL para ir metiendo material nuevo.
+    'partes' ya no decide nada: en la conversacion las partes las marca el
+    perfil de reglas, no el montador. Se conserva el parametro para no
+    romper a quien llame con el.
     """
-    carpeta = Path(carpeta)
-    if not partes:
-        partes = len(proy.partes_de(carpeta)) or 4
-    return VentanaGuion(carpeta, partes, perfil).abrir()
+    return VentanaGuion(Path(carpeta), partes, perfil).abrir()

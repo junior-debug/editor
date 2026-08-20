@@ -201,13 +201,44 @@ def cmd_guion(args):
         # justamente una de las cosas que aun no estan dentro
         carpeta, _ = proy.preguntar_carpeta()
 
-    from .ui_guion import escribir_guion
-    destino = escribir_guion(carpeta, args.partes, args.reglas)
+    if args.auto:
+        destino = _guion_de_un_tiron(carpeta, args)
+    else:
+        from .ui_guion import escribir_guion
+        destino = escribir_guion(carpeta, args.partes, args.reglas)
 
     if destino:
         print(f"Guion guardado en {destino}")
     else:
         print("No se ha guardado ningun guion.")
+
+
+def _guion_de_un_tiron(carpeta, args):
+    """
+    Escribe el guion entero sin preguntar nada, por consola.
+
+    La ventana conversa, que es como trabaja el usuario. Esto es para cuando
+    el perfil son solo reglas de estilo, sin mecanica por pasos, y lo unico
+    que se quiere es el texto.
+    """
+    from . import guionista as gui
+    from . import perfiles as perf
+
+    tema = args.auto.strip()
+    reglas = perf.cargar(args.reglas) if args.reglas else ""
+    partes = args.partes or len(proy.partes_de(carpeta)) or 4
+
+    print(f"  tema   : {tema}")
+    print(f"  reglas : {args.reglas or 'las de por defecto'}")
+    print(f"  partes : {partes}")
+    print()
+
+    escritas = gui.generar(
+        tema, args.minutos, partes, trabajo=carpeta, reglas=reglas,
+        avance=lambda n, total, texto: print(
+            f"  parte {n} de {total}: {len(texto.split())} palabras"))
+
+    return gui.guardar(carpeta, gui.unir(escritas))
 
 
 def cmd_voz(args):
@@ -321,6 +352,11 @@ def main(argv=None):
                         "como carpetas parteN haya)")
     p.add_argument("--reglas", default="",
                    help="perfil de reglas a usar, de MasterTube\\perfiles")
+    p.add_argument("--auto", default="", metavar="TEMA",
+                   help="escribirlo de un tiron sobre ese tema, sin ventana "
+                        "y sin preguntar nada")
+    p.add_argument("--minutos", type=float, default=13,
+                   help="duracion buscada del video, solo con --auto")
     p.set_defaults(func=cmd_guion)
 
     p = sub.add_parser("voz", help="narrar el guion con ai33.pro")
