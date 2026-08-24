@@ -660,6 +660,14 @@ identificadores de biblioteca.
 
 - Los clips entran a escala 1:1, sin recorte ni zoom. Material que no sea
   1920×1080 sale con bandas.
+- Manejar el montador por voz con Jarvis, el asistente propio del usuario
+  (`Escritorio\Jarvis-PC-Assistant`, Python + Gemini). Apuntado para más
+  adelante, no pedido todavía. El enganche es `core/router.py` (prefijos ->
+  `Intent`) y un `actions/montador_actions.py`; el primer nivel es que Jarvis
+  ejecute los comandos CLI que el montador ya expone, sin que los dos
+  proyectos se importen. Por voz tienen sentido las órdenes que lanzan trabajo
+  largo —montar, buscar ideas, generar la voz— y preguntar el estado de un
+  vídeo; **no** elegir clips ni revisar el guion, que es mirar y decidir.
 - Subir a YouTube desde el montador **está descartado**: junior no lo quiere.
   La subida la hace él. No volver a proponerlo.
 - La miniatura sigue siendo manual, y se queda asi: la API de imagenes de
