@@ -658,9 +658,6 @@ identificadores de biblioteca.
 
 ### Pendiente
 
-- Recalibrar `config.py` comparando un borrador generado con la versión que
-  el usuario retoca a mano. El `montar.bat` ya guarda `edl.json` para poder
-  hacer la comparación exacta en vez de estadística.
 - Los clips entran a escala 1:1, sin recorte ni zoom. Material que no sea
   1920×1080 sale con bandas.
 - Subir a YouTube desde el montador **está descartado**: junior no lo quiere.
@@ -677,6 +674,13 @@ identificadores de biblioteca.
 Resuelto y ya no está aquí: la posición de los rótulos y la entrada de las
 partes, que se estimaban a ojo y ahora salen de cruzar el guion con la
 transcripción (ver arriba).
+
+**Recalibrar `config.py` tampoco hace falta ya, y conviene no volver a
+intentarlo sin medir antes.** Se comparó el `edl.json` generado del vídeo
+catorce con el borrador que el usuario dejó tras retocarlo: 236 cortes contra
+235, mismo corte medio (4,69 s), misma mediana, 78 transiciones contra 77.
+El ritmo está calibrado. Lo único que añade a mano son rótulos —9 contra 12—
+y la cabecera de entrada, que ya se genera sola.
 
 ## Convenciones
 
