@@ -28,6 +28,7 @@ class VentanaProyecto:
         self.base = proy.raiz()
         self.elegida: Path | None = None
         self.creada = False       # recien hecha: no hay que listarle lo que falta
+        self.idea = None          # la elegida en la ventana de ideas
         self.partes_por_defecto = partes_por_defecto
 
         self.raiz = tk.Tk()
@@ -105,6 +106,10 @@ class VentanaProyecto:
 
         ttk.Button(nuevo, text="Crear y empezar",
                    command=self._crear).grid(row=0, column=4)
+
+        # el paso anterior a crear la carpeta: decidir de que va el video
+        ttk.Button(nuevo, text="Buscar ideas...",
+                   command=self._ideas).grid(row=0, column=5, padx=(6, 0))
 
         # ---- pie ----
         pie = ttk.Frame(marco)
@@ -202,6 +207,7 @@ class VentanaProyecto:
         if destino.exists():
             # no se pisa nada: se abre la que ya hay, que es lo que se queria
             self.elegida = destino
+            self._cerrar_idea(destino)
             self.raiz.destroy()
             return
 
@@ -212,10 +218,37 @@ class VentanaProyecto:
 
         self.elegida = proy.crear(nombre, partes)
         self.creada = True
+        self._cerrar_idea(self.elegida)
         # se deja abierta en el Explorador: casi siempre lo siguiente es
         # soltar algo dentro
         proy.abrir_en_explorador(self.elegida)
         self.raiz.destroy()
+
+    def _ideas(self) -> None:
+        """
+        De que hacer el proximo video.
+
+        Va aqui y no en la ventana del guion porque es el paso de antes:
+        primero se decide el tema y despues se crea la carpeta con su nombre.
+        """
+        from .ui_ideas import elegir_idea
+        idea = elegir_idea(self.raiz)
+        if idea is None:
+            return
+        self.idea = idea
+        # el nombre de la carpeta lo pone el usuario -las suyas van por
+        # ordinales, no por tema-, asi que solo se deja el titular a la vista
+        self.nombre.focus_set()
+        self._decir(f"Idea elegida: {idea.titular[:60]}. "
+                    f"Ponle nombre a la carpeta y dale a crear.")
+
+    def _cerrar_idea(self, destino) -> None:
+        """Deja anotado en que video acabo la idea elegida."""
+        if self.idea is None:
+            return
+        from . import ideas as id_mod
+        id_mod.marcar(self.idea.titular, id_mod.HECHA, carpeta=destino.name)
+        self.idea = None
 
     def _abrir_explorador(self) -> None:
         carpeta = self._seleccionada() or self.base

@@ -107,6 +107,45 @@ y se fusionaron encima. Los dos son CapCut 9.2.8, que es lo que hace segura la
 mezcla. Al regenerar el archivo entero desde un solo proyecto se perdería el
 efecto si ese proyecto no lo lleva.
 
+## De qué hacer el próximo vídeo
+
+`ideas.py` + `ui_ideas.py`. Claude busca en internet según unas reglas del
+usuario, propone temas con su cifra y su fuente, y se lleva la cuenta de lo
+que ya se ha hecho para que no lo repita.
+
+**Lo ya hecho no se apunta a mano.** Sale de dos sitios que se suman:
+
+- `MasterTube\ideas.json`, con todo lo propuesto alguna vez y su estado
+  (`propuesta`, `elegida`, `hecha`, `descartada`). Una idea descartada no
+  vuelve a ofrecerse, y ese es medio motivo de que exista el archivo.
+- Las carpetas de vídeo, de donde se lee la marca `[INTRO: ...]` o, si no la
+  lleva, la primera frase del guion —que en este canal es siempre el dato que
+  engancha—. Eso hace que los seis vídeos anteriores a todo esto cuenten sin
+  tener que teclear nada.
+
+Las reglas son del usuario y viven en `MasterTube\perfiles-ideas`, con el
+mismo patrón que los perfiles de guion y por el mismo motivo: son contenido
+suyo, no código. Hay varias y se eligen en un desplegable, porque el día que
+abra un segundo canal sus reglas serán otras.
+
+El encargo lleva **el orden explícito de buscar** (`BUSCA EN INTERNET antes de
+responder`), y hace falta: con las herramientas concedidas pero sin el encargo,
+Claude escribe de memoria. Es la misma lección que el guionista. En la prueba
+real tardó **seis minutos** y devolvió cinco temas con sus fuentes; por eso la
+llamada va en un hilo con barra y con un aviso que dice que tarda.
+
+Vuelven en un bloque `---IDEAS---` … `---FIN---`, una por línea con cuatro
+campos separados por barras: titular, el dato, por qué ahora, la fuente. El
+lector es tolerante como el de las búsquedas —si faltan las marcas pero las
+líneas traen sus barras, se leen igual—, porque perder seis temas bien
+buscados por un delimitador ausente sería absurdo teniéndolos delante.
+
+El botón está en la **ventana de proyecto** y no en la del guion, porque es el
+paso de antes: primero se decide el tema y después se crea la carpeta. Al
+elegir una idea no se inventa el nombre de la carpeta —las de junior van por
+ordinales, "video quince", no por tema—: se deja el titular a la vista y él la
+nombra. Cuando la carpeta se crea, la idea queda `hecha` y anotada con ella.
+
 ## Por dónde se entra: la ventana de proyecto
 
 `ui_proyecto.py` es lo primero que sale al abrir el montador sin `--clips`.
@@ -638,6 +677,9 @@ transcripción (ver arriba).
       guionista.py         guion negociado con Claude por turnos (Conversacion)
                            + modo de un tiron para perfiles sin pasos
       perfiles.py          reglas de guion del usuario (MasterTube\perfiles)
+      ideas.py             de que hacer el proximo video: Claude busca en
+                           internet, y se guarda lo ya hecho para no repetir
+      ui_ideas.py          ventana de ideas, con sus reglas y sus estados
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
       descargas.py         enlace copiado -> clip numerado dentro de parteN
                            (yt-dlp por subproceso; dependencia opcional)
