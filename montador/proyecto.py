@@ -72,6 +72,27 @@ def carpeta(nombre: str) -> Path:
     return raiz() / sanear(nombre)
 
 
+def es_proyecto(destino: Path) -> bool:
+    """
+    Si esa carpeta de MasterTube es un video y no material de trabajo.
+
+    Hace falta porque en MasterTube conviven las dos cosas: al lado de los
+    videos estan 'perfiles', 'reuniones', 'nicho'... Se reconoce por lo que
+    hay dentro -alguna parteN, un guion o un audio- y no por el nombre, que
+    cada uno pone el que quiere.
+    """
+    if not destino.is_dir() or destino.name.lower() == "perfiles":
+        return False
+    if partes_de(destino):
+        return True
+    try:
+        sueltos = [p for p in destino.iterdir() if p.is_file()]
+    except OSError:
+        return False
+    return any(p.suffix.lower() in EXTENSIONES_AUDIO
+               or p.stem.lower() == "guion" for p in sueltos)
+
+
 def partes_de(destino: Path) -> list[Path]:
     return sorted(
         [d for d in destino.iterdir()
@@ -321,13 +342,30 @@ def esperar_material(destino: Path) -> None:
             return
 
 
+def _elegir() -> tuple[Path, bool]:
+    """
+    La carpeta del video, en ventana si se puede y por consola si no.
+
+    La ventana es lo normal; la consola queda de respaldo para una maquina
+    sin tkinter o sin escritorio, donde abrir una ventana no es una opcion.
+    """
+    try:
+        from .ui_proyecto import elegir_carpeta      # importacion perezosa:
+        destino, nueva = elegir_carpeta()            # ui_proyecto importa esto
+    except Exception:
+        return preguntar_carpeta()
+    if destino is None:
+        raise RuntimeError("Cancelado: no se ha elegido ningun video.")
+    return destino, nueva
+
+
 def preparar() -> Path:
     """
     Flujo completo: preguntar nombre, crear, esperar a que se llene.
 
     Si la carpeta ya estaba completa no hace esperar a nadie: monta directo.
     """
-    destino, nueva = preguntar_carpeta()
+    destino, nueva = _elegir()
     errores, avisos = revisar(destino)
     if errores:
         if not nueva:

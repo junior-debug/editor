@@ -88,6 +88,31 @@ y se fusionaron encima. Los dos son CapCut 9.2.8, que es lo que hace segura la
 mezcla. Al regenerar el archivo entero desde un solo proyecto se perdería el
 efecto si ese proyecto no lo lleva.
 
+## Por dónde se entra: la ventana de proyecto
+
+`ui_proyecto.py` es lo primero que sale al abrir el montador sin `--clips`.
+Antes esto se preguntaba por consola y no tenía sentido: el resto del trabajo
+—guion, voz, clips, montaje— ya pasa entero en una ventana.
+
+Lista los vídeos de MasterTube **del último tocado al primero**, porque lo
+normal es seguir con el de ayer, y de cada uno enseña lo que ya tiene hecho:
+cuántas partes, cuántos clips, si hay guion y si hay voz. Por consola había
+que ir mirando carpeta por carpeta.
+
+`es_proyecto()` separa los vídeos del material de trabajo: en MasterTube
+conviven con `perfiles`, `reuniones`, `nicho`… Se reconoce **por lo que hay
+dentro** —alguna `parteN`, un guion o un audio— y no por el nombre, que cada
+uno pone el que quiere. La casilla "ver todas" enseña el resto, y si el filtro
+no deja nada se enseña todo igualmente: entonces el que se equivoca es el
+filtro, no el usuario.
+
+Son **dos `Tk()` seguidos y nunca a la vez** —esta ventana se destruye antes
+de que exista la del guion—, porque tkinter no lleva bien dos raíces vivas.
+
+Un nombre que ya existe no pisa nada: abre la carpeta que hay, que es lo que
+se quería. Y `preparar()` (el camino de `montar.bat`) usa la misma ventana,
+con la consola de respaldo por si algún día no hay escritorio donde abrirla.
+
 ## El guion lo escribe Claude, hablando
 
 `guionista.py` no escupe el guion de un tirón: lo negocia por turnos, porque
@@ -580,6 +605,8 @@ transcripción (ver arriba).
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
       descargas.py         enlace copiado -> clip numerado dentro de parteN
                            (yt-dlp por subproceso; dependencia opcional)
+      ui_proyecto.py       ventana de entrada: elegir el video o crear uno
+                           nuevo con sus parteN, con lo que ya tiene hecho
       ui_guion.py          ventana (tkinter): chat con Claude, atajos, la
                            pestana Guion con lo locutable, la pestana Clips
                            con que buscar para cada parteN y el vigilante del
@@ -620,8 +647,8 @@ transcripción (ver arriba).
 La narración, el guion y `trans.json` se autodetectan dentro de `--clips`.
 Whisper es lo lento; `trans.json` se guarda y se reutiliza solo.
 
-Sin `--clips`, `montar` pregunta el nombre de la carpeta y trabaja dentro de
-`Escritorio\MasterTube` (se puede mover con la variable de entorno
+Sin `--clips`, `montar` y `guion` abren la ventana de proyecto y trabajan
+dentro de `Escritorio\MasterTube` (se puede mover con la variable de entorno
 `MASTERTUBE`): la crea con sus `parteN`, la abre en el Explorador y no sigue
 hasta que dentro hay narración y clips. Si ya está completa, no espera. El
 nombre del borrador y `edl.json` salen de la carpeta si no se indican.

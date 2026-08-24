@@ -218,9 +218,17 @@ def cmd_guion(args):
         if not carpeta.exists():
             raise RuntimeError(f"No existe la carpeta {carpeta}")
     else:
-        # aqui no se espera a que la carpeta este llena: el guion es
-        # justamente una de las cosas que aun no estan dentro
-        carpeta, _ = proy.preguntar_carpeta()
+        # En ventana y no por consola: el resto del trabajo -guion, voz,
+        # clips, montaje- ya pasa entero en una ventana, y ahi se ve de un
+        # vistazo lo que tiene hecho cada video.
+        #
+        # Aqui no se espera a que la carpeta este llena: el guion es
+        # justamente una de las cosas que aun no estan dentro.
+        from .ui_proyecto import elegir_carpeta
+        carpeta, _ = elegir_carpeta(args.partes)
+        if carpeta is None:
+            print("No se ha elegido ningun video.")
+            return
 
     if args.auto:
         destino = _guion_de_un_tiron(carpeta, args)
