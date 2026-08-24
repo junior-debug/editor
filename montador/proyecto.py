@@ -310,7 +310,23 @@ def preguntar_carpeta() -> tuple[Path, bool]:
 
 
 def esperar_material(destino: Path) -> None:
-    """Abre la carpeta y no sigue hasta que dentro este todo lo necesario."""
+    """
+    No sigue hasta que dentro este todo lo necesario.
+
+    Lo primero que hace es abrir la ventana del guion, y no es un atajo: es
+    **el sitio donde se resuelve lo que falta**. Ahi se escribe el guion, se
+    genera la voz, se bajan los clips a sus parteN y se monta. Explicar por
+    consola lo que hay que dejar en la carpeta, teniendo la herramienta que
+    lo hace a un clic, era dejar el trabajo a medias.
+
+    Al cerrarla se vuelve a mirar la carpeta: si ya esta completa, se sigue
+    sin preguntar nada. Y si no, queda el bucle de consola de siempre.
+    """
+    if _abrir_ventana_guion(destino):
+        errores, _ = revisar(destino)
+        if not errores:
+            return
+
     abrir_en_explorador(destino)
     print()
     print("  Deja dentro de esa carpeta:")
@@ -331,15 +347,37 @@ def esperar_material(destino: Path) -> None:
             raise RuntimeError("Cancelado: la carpeta se queda como esta.")
 
         if respuesta in ("guion", "g"):
-            # perezoso: ui_guion importa este modulo, y arriba seria circular
-            from .ui_guion import escribir_guion
-            escribir_guion(destino)
+            _abrir_ventana_guion(destino)
             continue
 
         errores, avisos = revisar(destino)
         _mostrar(errores, avisos)
         if not errores:
             return
+
+
+def _abrir_ventana_guion(destino: Path) -> bool:
+    """
+    Abre la ventana del guion sobre esa carpeta. False si no se pudo.
+
+    La importacion va aqui dentro y no arriba porque ui_guion importa este
+    modulo: al reves seria circular.
+    """
+    try:
+        from .ui_guion import escribir_guion
+    except Exception as exc:
+        print(f"  (no se ha podido abrir la ventana: {exc})")
+        return False
+
+    print()
+    print("  Abriendo la ventana del guion. Cierrala cuando termines y")
+    print("  el montaje sigue solo.")
+    try:
+        escribir_guion(destino)
+    except Exception as exc:
+        print(f"  (la ventana ha fallado: {exc})")
+        return False
+    return True
 
 
 def _elegir() -> tuple[Path, bool]:

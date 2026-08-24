@@ -113,6 +113,16 @@ Un nombre que ya existe no pisa nada: abre la carpeta que hay, que es lo que
 se quería. Y `preparar()` (el camino de `montar.bat`) usa la misma ventana,
 con la consola de respaldo por si algún día no hay escritorio donde abrirla.
 
+**Al elegir una carpeta a la que le falta material se abre sola la ventana del
+guion**, en lugar de listar por consola lo que hay que dejar dentro. No es un
+atajo: esa ventana es el sitio donde se resuelve lo que falta —escribe el
+guion, genera la voz, baja los clips a sus `parteN` y monta—. Explicarlo por
+consola teniendo la herramienta a un clic era dejar el trabajo a medias. Al
+cerrarla se vuelve a mirar la carpeta: si ya está completa el montaje sigue
+sin preguntar nada, y si no, queda el bucle de consola de siempre.
+
+Con una carpeta ya completa no se abre nada y se monta directo.
+
 ## El guion lo escribe Claude, hablando
 
 `guionista.py` no escupe el guion de un tirón: lo negocia por turnos, porque
