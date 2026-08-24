@@ -663,9 +663,8 @@ identificadores de biblioteca.
   hacer la comparación exacta en vez de estadística.
 - Los clips entran a escala 1:1, sin recorte ni zoom. Material que no sea
   1920×1080 sale con bandas.
-- Subir a YouTube desde el montador: con `publicacion.txt` y `capitulos.txt`
-  ya generados, lo que falta es la API y autorizar la cuenta una vez. Subir
-  siempre en privado o programado, nunca público directo.
+- Subir a YouTube desde el montador **está descartado**: junior no lo quiere.
+  La subida la hace él. No volver a proponerlo.
 - La miniatura sigue siendo manual, y se queda asi: la API de imagenes de
   OpenAI se paga aparte de ChatGPT Plus y junior prefiere seguir generandolas
   en el navegador, que ya tiene pagado. Se intento (commit fcbcba7) y se
