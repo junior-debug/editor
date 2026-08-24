@@ -322,9 +322,39 @@ Si el guion tiene más partes que carpetas —cinco partes contra cuatro
 `parteN`, que es lo normal hoy—, las que sobran se suman al final de la
 última. Tenerlas de más en un sitio raro es mejor que perderlas.
 
-Lo que se guarda y lo que se abre en el navegador sale de **lo que haya en la
-pestaña**, no de lo que dijo Claude: las búsquedas se retocan, se prueba una,
-no da nada y se cambia una palabra.
+Lo que se guarda y lo que se busca sale de **lo que haya en la pestaña**, no
+de lo que dijo Claude: las búsquedas se retocan, se prueba una, no da nada y
+se cambia una palabra.
+
+### La rejilla de resultados
+
+Los botones `Parte N` ya no abren el navegador: abren `ui_resultados.py`, con
+los primeros ocho resultados de cada búsqueda dentro de la ventana. Se marcan
+los que valen y se bajan a su `parteN`.
+
+El motivo está medido: **veinte clips de media por montaje**, hasta veintiséis.
+Si de cada búsqueda se miran tres o cuatro candidatos, son sesenta o setenta
+vídeos abiertos y cerrados en cada vídeo. Buscar sin descargar cuesta **dos
+segundos** (`yt-dlp --flat-playlist`, que no entra en cada vídeo y por eso es
+rápido), y las miniaturas otro segundo.
+
+Lo que más descarta es **la duración, delante del título**: uno de doce
+minutos es una charla y uno de treinta segundos es el plano que se busca, y
+hasta ahora eso no se sabía hasta abrirlo. Los que pasan del tope salen en
+rojo.
+
+No se pierde la revisión a ojo, que es justo lo que el usuario dijo que le
+sirve: doble clic en cualquier resultado lo abre en YouTube, y queda un botón
+para abrir la búsqueda entera en el navegador. Lo que se quita es abrir diez
+pestañas para descartar siete. Sin yt-dlp se cae al navegador, que es lo que
+había.
+
+Dos cosas de tkinter que no son opcionales ahí: las `PhotoImage` se guardan en
+una lista de la ventana o el recolector se las lleva y la rejilla se queda en
+blanco; y el scroll sobre una rejilla de widgets necesita un `Canvas` con un
+frame dentro, no hay otra forma. Las miniaturas van en PNG porque es lo que
+tkinter lee sin ayuda, y las convierte ffmpeg, que ya está: así ver ocho
+imágenes no obliga a instalar nada.
 
 ### Bajar los clips: el portapapeles manda
 
@@ -681,8 +711,10 @@ transcripción (ver arriba).
                            internet, y se guarda lo ya hecho para no repetir
       ui_ideas.py          ventana de ideas, con sus reglas y sus estados
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
-      descargas.py         enlace copiado -> clip numerado dentro de parteN
-                           (yt-dlp por subproceso; dependencia opcional)
+      descargas.py         buscar sin bajar, y de enlace a clip numerado
+                           dentro de parteN (yt-dlp; dependencia opcional)
+      ui_resultados.py     rejilla de resultados: miniatura, duracion y
+                           titulo; se marca y se baja a su parteN
       ui_proyecto.py       ventana de entrada: elegir el video o crear uno
                            nuevo con sus parteN, con lo que ya tiene hecho
       ui_guion.py          ventana (tkinter): chat con Claude, atajos, la

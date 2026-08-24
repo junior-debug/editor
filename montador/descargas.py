@@ -27,6 +27,8 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 from .edl import EXTENSIONES_VIDEO
@@ -112,6 +114,116 @@ def es_enlace(texto: str) -> str:
     if _RE_ARCHIVO.match(texto):
         return texto
     return ""
+
+
+# --------------------------------------------------------------------------
+# Buscar sin descargar
+# --------------------------------------------------------------------------
+
+@dataclass
+class Resultado:
+    """Un video de la lista de resultados, todavia sin bajar."""
+    id: str
+    titulo: str
+    duracion_s: float
+    canal: str
+
+    @property
+    def url(self) -> str:
+        return f"https://www.youtube.com/watch?v={self.id}"
+
+    @property
+    def miniatura(self) -> str:
+        # se arma con el id en vez de pedirsela a yt-dlp: con
+        # --flat-playlist no siempre viene, y esta direccion es fija
+        return f"https://i.ytimg.com/vi/{self.id}/mqdefault.jpg"
+
+    @property
+    def duracion(self) -> str:
+        if not self.duracion_s:
+            return "?"
+        minutos, segundos = divmod(int(self.duracion_s), 60)
+        horas, minutos = divmod(minutos, 60)
+        return (f"{horas}:{minutos:02d}:{segundos:02d}" if horas
+                else f"{minutos}:{segundos:02d}")
+
+    @property
+    def larga(self) -> bool:
+        return not self.duracion_s or self.duracion_s > DURACION_MAXIMA_S
+
+
+def buscar(termino: str, cuantos: int = 8) -> list[Resultado]:
+    """
+    Los primeros resultados de YouTube, **sin descargar nada**.
+
+    Cuesta un par de segundos y ahorra el paseo al navegador: con el titulo y
+    la duracion delante se descarta solo la mitad. Un resultado de siete
+    minutos es una charla; el de diecisiete segundos es el plano que se busca,
+    y hoy eso no se sabe hasta abrirlo.
+    """
+    orden = [
+        sys.executable, "-m", "yt_dlp",
+        "--flat-playlist",   # no entra en cada video: es lo que lo hace rapido
+        "--no-warnings",
+        "--print", "%(id)s\t%(duration)s\t%(channel)s\t%(title)s",
+        f"ytsearch{max(1, min(cuantos, 20))}:{termino}",
+    ]
+    lineas: list[str] = []
+    codigo = _leer_salida(orden, lineas.append)
+    if codigo != 0 and not lineas:
+        if "No module named" in "\n".join(lineas):
+            raise SinYtDlp("yt-dlp no esta instalado")
+        raise RuntimeError(f"la busqueda de '{termino}' no ha dado nada")
+
+    resultados = []
+    for linea in lineas:
+        campos = linea.split("\t")
+        if len(campos) < 4 or not campos[0].strip():
+            continue
+        try:
+            duracion = float(campos[1])
+        except ValueError:
+            duracion = 0.0        # 'NA': un directo, o algo sin duracion
+        resultados.append(Resultado(id=campos[0].strip(), duracion_s=duracion,
+                                    canal=campos[2].strip(),
+                                    titulo=campos[3].strip()))
+    return resultados
+
+
+def miniatura(resultado: Resultado, carpeta: Path, ancho: int = 200) -> Path | None:
+    """
+    Baja la miniatura y la deja en PNG, que es lo que sabe leer tkinter.
+
+    La conversion la hace ffmpeg, que ya esta: asi la rejilla de resultados no
+    obliga a instalar nada para ver cuatro imagenes.
+    """
+    carpeta = Path(carpeta)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    destino = carpeta / f"{resultado.id}.png"
+    if destino.exists():
+        return destino
+
+    crudo = carpeta / f"{resultado.id}.jpg"
+    try:
+        peticion = urllib.request.Request(
+            resultado.miniatura,
+            # el mismo motivo que en voz.py: al User-Agent de urllib pelado
+            # algunos CDN le contestan 403
+            headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(peticion, timeout=20) as r:
+            crudo.write_bytes(r.read())
+
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(crudo),
+             "-vf", f"scale={ancho}:-1", str(destino)],
+            capture_output=True, creationflags=SIN_CONSOLA)
+    except Exception:
+        # una miniatura que no baja no puede tumbar la busqueda entera: la
+        # rejilla la pinta vacia y el titulo se lee igual
+        return None
+    finally:
+        crudo.unlink(missing_ok=True)
+    return destino if destino.exists() else None
 
 
 # --------------------------------------------------------------------------
