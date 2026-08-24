@@ -70,11 +70,32 @@ class EstiloRotulo:
 
 
 @dataclass
+class EstiloEfecto:
+    """
+    La capa de efecto que cubre el video entero.
+
+    Sale del proyecto 'catorce_auto', donde junior la puso a mano: una sola
+    pista de efecto, de 0 al final, sin trocear. La velocidad la bajo de 0,33
+    -el valor de fabrica del efecto- a 0,3, y ese es el numero que se copia.
+
+    'Bordes de fuego', el otro efecto de aquel proyecto, NO se reproduce: solo
+    duraba tres segundos al principio y eso es una entrada concreta de ese
+    video, no una regla del canal.
+    """
+    activo: bool = True
+    nombre: str = "Ruido negro"
+    effect_id: str = "7399470796290166022"
+    # 'effects_adjust_speed' del efecto; None deja el que traiga el prototipo
+    velocidad: float | None = 0.3
+
+
+@dataclass
 class Estilo:
     corte: EstiloCorte = field(default_factory=EstiloCorte)
     transicion: EstiloTransicion = field(default_factory=EstiloTransicion)
     sonido: EstiloSonido = field(default_factory=EstiloSonido)
     rotulo: EstiloRotulo = field(default_factory=EstiloRotulo)
+    efecto: EstiloEfecto = field(default_factory=EstiloEfecto)
 
     fps: float = 30.0
     ancho: int = 1920

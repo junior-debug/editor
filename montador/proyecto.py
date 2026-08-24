@@ -23,6 +23,12 @@ PROHIBIDOS = '<>:"/\\|?*'
 
 ES_PARTE = re.compile(r"parte\s*\d+", re.I)
 
+# Cualquier .txt suelto en la raiz puede acabar tomandose por el guion, asi
+# que lo demas que escribimos ahi va excluido por nombre. La lista esta aqui
+# y no repetida en cada sitio porque cuando lo estaba se quedo sin actualizar:
+# 'busquedas' faltaba en la deteccion de 'montador voz'.
+NO_SON_GUION = ("trans", "busquedas", "publicacion", "guion_anterior")
+
 
 # --------------------------------------------------------------------------
 # Localizacion
@@ -109,6 +115,20 @@ def guardar_busquedas(destino: Path,
     return escritos
 
 
+def guardar_publicacion(destino: Path, texto: str) -> Path:
+    """
+    Escribe los titulos y la descripcion en la raiz de la carpeta.
+
+    Aqui si van sueltos y no dentro de una parteN: no ilustran nada, son del
+    video entero. El nombre queda excluido de la deteccion del guion en los
+    dos sitios donde se busca un .txt en la raiz; sin eso, un dia sin
+    guion.txt se acabaria narrando la descripcion de YouTube.
+    """
+    ruta = destino / "publicacion.txt"
+    ruta.write_text(texto.strip() + "\n", encoding="utf-8")
+    return ruta
+
+
 def _texto_busquedas(busquedas: dict[int, list[str]]) -> str:
     # importacion perezosa: guionista importa este modulo indirectamente
     from .guionista import texto_busquedas
@@ -168,7 +188,7 @@ def revisar(destino: Path) -> tuple[list[str], list[str]]:
 
     guiones = [p for p in destino.iterdir()
                if p.is_file() and p.suffix.lower() == ".txt"
-               and p.stem.lower() not in ("trans", "busquedas")]
+               and p.stem.lower() not in NO_SON_GUION]
     if not guiones:
         avisos.append("no hay guion .txt: el montaje saldra sin rotulos")
 

@@ -52,7 +52,41 @@ prototipo de un proyecto real; no lo inventes.
 - Los sonidos se anticipan al corte hasta 0,87 s; ~45 % caen en el frame
   exacto.
 
+- **Una capa de efecto cubre el vídeo entero**: "Ruido negro", de 0 al final,
+  sin trocear, con la velocidad a 0,3 (el valor de fábrica del efecto es
+  0,33). Sale de `catorce_auto`, donde el usuario la puso a mano.
+
 Al cambiar el estilo, tocar `config.py`, no la lógica.
+
+### La capa de efecto
+
+`EstiloEfecto` en `config.py` la enciende y la apaga. Va en el **EDL**, no
+solo en el escritor, por lo mismo que las transiciones y los sonidos: también
+son del catálogo de CapCut y también están ahí. Lo que sí es cierto es que
+`render.py` no puede aplicarla —es un efecto propietario— y la ignora, igual
+que ignora las transiciones.
+
+En la timeline es **una pista propia** con un único segmento; no cuelga de
+ningún bloque de vídeo. Va detrás de los rótulos y delante del audio, que es
+el orden en el que CapCut las deja al añadirla a mano. Su segmento no lleva
+`extra_material_refs` —en el proyecto original venían vacías— y su
+`source_timerange` es `null`: un efecto no lee de ningún archivo.
+
+El `path` del material apunta a la caché de efectos de CapCut y **no se
+limpia**, igual que los efectos de sonido. Aquí vale la misma regla: los
+identificadores de biblioteca solo estorban cuando el material apunta a un
+archivo del disco del usuario, que era el caso del audio.
+
+De aquel proyecto se copia **solo el ruido**. "Bordes de fuego", el otro
+efecto que hay en él, duraba tres segundos al principio: eso es la entrada de
+ese vídeo concreto, no una regla del canal.
+
+**Ojo con `plantillas/prototipos_9.2.8.json`: ya no sale de un único
+proyecto.** Todo viene de "0817" menos `segmentos.efecto`,
+`materiales.efecto` y `catalogo_efectos`, que se extrajeron de `catorce_auto`
+y se fusionaron encima. Los dos son CapCut 9.2.8, que es lo que hace segura la
+mezcla. Al regenerar el archivo entero desde un solo proyecto se perdería el
+efecto si ese proyecto no lo lleva.
 
 ## El guion lo escribe Claude, hablando
 
@@ -184,9 +218,12 @@ en la raíz, y por dos razones:
   tomándose por el guion (`cli.py`, autodetección). Dentro de `parteN` solo
   cuentan las extensiones de vídeo, así que un `.txt` es inofensivo.
 
-Aun así, `busquedas` está excluido por nombre en la autodetección y en
-`revisar()`, porque el caso sin carpetas `parteN` sí escribe en la raíz. Si un
-día se cambia el nombre del archivo, hay que cambiarlo en los tres sitios.
+Aun así, `busquedas` está excluido por nombre, porque el caso sin carpetas
+`parteN` sí escribe en la raíz. Los nombres excluidos son **una sola lista**,
+`proyecto.NO_SON_GUION`, y están juntos por escarmiento: cuando la lista
+estaba copiada en cada sitio, `busquedas` se quedó sin poner en la detección
+de `montador voz`, que es justo el sitio donde se habría narrado. Al añadir
+otro archivo a la raíz, basta con meterlo ahí.
 
 Si el guion tiene más partes que carpetas —cinco partes contra cuatro
 `parteN`, que es lo normal hoy—, las que sobran se suman al final de la
@@ -195,6 +232,135 @@ Si el guion tiene más partes que carpetas —cinco partes contra cuatro
 Lo que se guarda y lo que se abre en el navegador sale de **lo que haya en la
 pestaña**, no de lo que dijo Claude: las búsquedas se retocan, se prueba una,
 no da nada y se cambia una palabra.
+
+### Bajar los clips: el portapapeles manda
+
+Era el último paso manual de punta a punta: buscar el vídeo, copiar el enlace,
+clic derecho, guardar como, elegir la carpeta, y otra vez. `descargas.py` lo
+deja en **copiar el enlace**.
+
+La ventana vigila el portapapeles cada medio segundo. Eliges la `parteN` en un
+desplegable, marcas la casilla, y a partir de ahí cada enlace de vídeo que
+copias se baja solo a esa carpeta. Se **sondea** en vez de escuchar un evento
+porque Windows no avisa del cambio de portapapeles a quien no se registra en
+la cadena del sistema, y eso desde tkinter no se hace.
+
+Se eligió esto sobre buscar y descargar en automático porque el usuario ya
+revisa los vídeos a ojo y **eso le sirve**: los abre, ve cuál vale, y lo que
+sobraba era la mecánica de guardarlo. Lo que se automatiza es lo mecánico, no
+el criterio.
+
+`es_enlace()` es el filtro, y su respuesta normal es **callar**: se le pasa
+todo lo que cae en el portapapeles durante una tarde. Solo reacciona a lo que
+sin duda es un vídeo —exige los once caracteres del identificador de YouTube,
+así que un enlace de canal, de lista o de la página de resultados no cuela— y
+normaliza a `watch?v=ID` pelado. Eso último hace dos cosas: **quita el
+`&list=`**, que sin él se bajaría la lista entera, y deja iguales las seis
+formas del mismo vídeo, que es lo que detecta el repetido.
+
+Los archivos van numerados `01_`, `02_` porque `edl.py` lee cada `parteN` con
+`sorted()`: **el nombre del archivo es lo que decide el orden de rotación**.
+`siguiente_indice()` cuenta lo que ya hay en el disco en vez de llevar la
+cuenta en memoria, para que los clips metidos a mano cuenten igual y para que
+cerrar la ventana y volver no empiece otra vez por el uno.
+
+Las descargas van **de una en una**. No es prudencia: con cuatro a la vez
+ninguna termina, el ancho de banda es el mismo, y sobre todo el número del
+archivo se calcula mirando la carpeta — dos simultáneas pedirían el mismo y
+una pisaría a la otra.
+
+No tocan el semáforo `trabajando`, a propósito: mientras baja un clip se sigue
+hablando con Claude y, sobre todo, se siguen copiando enlaces, que es justo lo
+que estás haciendo. Sí avisan al montar y al cerrar, porque montar con
+descargas a medias sale con menos clips de los que vas a tener.
+
+Antes de bajar se pregunta la duración (`datos()`, un segundo de coste). Del
+vídeo se usan cuatro segundos y pico, así que uno de tres horas son varios
+gigas para tirar casi enteros — y esos vídeos **salen en las búsquedas**: los
+recopilatorios de paisajes duran eso. Se descubrió cayendo en ello: una
+descarga de prueba llevaba 1,9 GB cuando se cortó. Pasada la media hora no se
+descarta solo, se **pregunta**, porque un recopilatorio largo puede ser justo
+el material que quieres; aceptarlo baja con el tope desactivado. Una duración
+desconocida (`NA`, que es lo que dan los directos) cuenta como pasada: un
+directo no tiene final y bajaría hasta llenar el disco.
+
+**yt-dlp se llama por subproceso, no importando la librería.** Se actualiza
+sola sin tocar el montador, y falta hace: YouTube cambia cada pocas semanas y
+yt-dlp va detrás — una versión clavada en el código sería una descarga rota
+cada dos meses. Además una descarga atascada se mata sin llevarse la ventana.
+Se invoca como `<python> -m yt_dlp` y no como `yt-dlp` a secas para usar la
+del mismo intérprete y no depender del PATH.
+
+Es la única dependencia y es **opcional**: sin ella el resto funciona igual y
+la ventana ofrece instalarla la primera vez que marcas la casilla. Que falte
+no da `FileNotFoundError` invocándola así, sino un código de salida y un `No
+module named`; se distingue porque ese fallo tiene arreglo de un clic y los
+demás no. Actualizar es también la reparación: cuando las descargas fallan de
+golpe habiendo funcionado ayer, casi siempre es que YouTube ha cambiado algo.
+
+### Título y descripción
+
+`PEDIR_PUBLICACION` pide ocho títulos y la descripción de YouTube, y también
+en la misma conversación: el título sale del gancho del guion y la descripción
+de lo que se cuenta dentro, con las fuentes que Claude ya consultó al
+escribirlo. Vuelven en un bloque `---PUBLICACION---` … `---FIN---`.
+
+Son ocho títulos y no uno porque el título se elige, no se acepta: el encargo
+pide que sean distintos entre sí —uno con la cifra, otro con la pregunta, otro
+con el nombre propio—, no ocho maneras de decir lo mismo.
+
+**La descripción tiene una plantilla fija de secciones** y no es decoración:
+sale de una descripción real que el usuario dio por buena (el vídeo del BYD
+Seal 08), después de que una versión libre no le gustara. El orden es cuerpo
+de cuatro o cinco párrafos sin encabezado, `📊 LOS DATOS DEL VÍDEO` con las
+cifras una por línea, `⚠️ ACLARACIONES` con los matices que impiden leer mal
+un dato —el precio es de otro mercado, la autonomía es de otro ciclo—,
+`🔗 FUENTES`, la pregunta con `💬`, la suscripción con `🔔` y una línea de
+hashtags. Las aclaraciones se quitan si no hay nada real que matizar, porque
+rellenarlas por rellenar es justo lo contrario de para lo que están.
+
+El nombre del canal **no está en el código**: el encargo le dice a Claude que
+lo saque de las reglas del perfil, que ya las tiene delante. Codificar aquí
+"Oriente Avanza" ataría el montador a un canal, y el reparto es el de siempre
+—el perfil pone el estilo, el contrato solo el formato—.
+
+Se le prohíbe el markdown explícitamente. YouTube no lo interpreta: unos
+asteriscos de negrita salen como asteriscos en la descripción publicada.
+
+`extraer_publicacion()` devuelve el bloque **como texto**, sin trocearlo en
+títulos y descripción. Es lo que se pega en YouTube tal cual, y trocearlo solo
+serviría para volver a juntarlo al guardar. Se guarda con
+`guardar_publicacion()` en `publicacion.txt`, en la raíz de la carpeta: no
+ilustra ninguna parte, es del vídeo entero. De ahí que su nombre esté en
+`NO_SON_GUION`.
+
+Lo que **no** lleva son los capítulos con minutajes, y el encargo se lo dice
+con su motivo: Claude sabe el orden de las partes pero no en qué segundo entra
+cada una, así que los inventaría, y un minutaje inventado manda al espectador
+al sitio equivocado. Eso sale de `trans.json` y es lo mismo que hace falta
+para deducir las entradas de las partes. Cuando se resuelva aquello, esto sale
+casi gratis: la sección se añade al final del bloque y ya está.
+
+### Montar sin salir de la ventana
+
+El botón **"Montar en CapCut"** hace lo que antes había que teclear:
+`python -m montador montar --clips <carpeta> --proyecto <nombre>`. Los dos
+argumentos ya los sabe la ventana —la carpeta es en la que trabaja y el nombre
+sale de `nombre_proyecto()`—, así que no pregunta nada.
+
+Se lanza como **proceso aparte**, no llamando a `cmd_montar()` dentro de la
+ventana, y no es por comodidad: Whisper tarda minutos y se lleva mucha
+memoria, un fallo suyo se llevaría por delante la conversación entera, y las
+líneas de avance que el CLI ya imprime se pintan en la charla sin inventar
+otro mecanismo. El hilo lee `stdout` línea a línea y las mete en la misma cola
+que usan la voz y las respuestas de Claude.
+
+Antes de arrancar hace tres cosas, y las tres evitan un montaje tirado a la
+basura: guarda el `guion.txt` si hay texto en la pestaña —el montaje lee el
+archivo, no el widget, y los rótulos saldrían de una versión vieja—, pasa
+`revisar()` y no sigue si faltan cosas, y comprueba con `tasklist` si CapCut
+está abierto. Lo último es un aviso, no una comprobación fiable: si `tasklist`
+falla se deja pasar, porque bloquear el montaje por no saber sería peor.
 
 ### El modo de un tirón sigue ahí
 
@@ -321,8 +487,9 @@ identificadores de biblioteca.
 - Semilla fija en `config.py`: el mismo material produce siempre el mismo
   montaje. No introducir aleatoriedad sin semilla.
 - Sin dependencias nuevas salvo necesidad real. Hoy solo `faster-whisper`
-  (y `anthropic`, opcional, solo para el respaldo por API del guionista); el
-  resto es librería estándar + FFmpeg y el CLI de Claude por subproceso.
+  (y dos opcionales: `anthropic`, para el respaldo por API del guionista, y
+  `yt-dlp`, para bajar los clips); el resto es librería estándar + FFmpeg y el
+  CLI de Claude por subproceso.
 - CapCut trabaja en **microsegundos**. Usar el helper `us()`.
 
 ## Estructura
@@ -331,16 +498,23 @@ identificadores de biblioteca.
       config.py            el estilo, en números
       proyecto.py          carpeta de trabajo en MasterTube: preguntar nombre,
                            crear parte1..parteN, comprobar que está completa,
-                           repartir las busquedas de clips por parteN
+                           repartir las busquedas de clips por parteN,
+                           guardar titulos y descripcion en publicacion.txt
       guionista.py         guion negociado con Claude por turnos (Conversacion)
                            + modo de un tiron para perfiles sin pasos
       perfiles.py          reglas de guion del usuario (MasterTube\perfiles)
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
+      descargas.py         enlace copiado -> clip numerado dentro de parteN
+                           (yt-dlp por subproceso; dependencia opcional)
       ui_guion.py          ventana (tkinter): chat con Claude, atajos, la
-                           pestana Guion con lo locutable y la pestana
-                           Clips con que buscar para cada parteN
+                           pestana Guion con lo locutable, la pestana Clips
+                           con que buscar para cada parteN y el vigilante del
+                           portapapeles que los baja, la pestana Publicacion
+                           con los titulos y la descripcion, y el boton que
+                           lanza el montaje en un proceso aparte
       alineacion.py        whisper -> palabras -> pausas (+ registro de DLL de CUDA en Windows)
-      edl.py               plan de cortes, rotacion de clips, transiciones, sonidos, rotulos
+      edl.py               plan de cortes, rotacion de clips, transiciones,
+                           sonidos, rotulos, capa de efecto
       capcut/escritor.py   EDL -> draft_content.json + draft_meta_info.json
       render.py            EDL -> MP4 con ffmpeg (borrador rapido y plan B)
       cli.py               montar / guion / voz / edl / alinear / render

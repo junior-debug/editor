@@ -38,6 +38,8 @@ class EscritorCapCut:
                              for t in self.p["catalogo_transiciones"]}
         self.sonidos_por_nombre = {s["name"]: s
                                    for s in self.p["catalogo_sonidos"]}
+        self.efectos_por_id = {e["effect_id"]: e
+                               for e in self.p.get("catalogo_efectos", [])}
         self.rotulos_por_nombre = {}
         for r in self.p.get("rotulos", []):
             # nos quedamos con el primero de cada plantilla
@@ -133,6 +135,35 @@ class EscritorCapCut:
         m["id"] = nuevo_id()
         return m
 
+    def _material_efecto(self, efecto) -> dict:
+        """
+        El efecto de video que cubre toda la timeline.
+
+        Se busca por effect_id en el catalogo y se cae al prototipo si no
+        esta. El 'path' apunta a la cache de efectos de CapCut y **no se
+        limpia**: es un recurso legitimo de la biblioteca, igual que los
+        efectos de sonido. Lo que no se toca es lo que hace que funcione.
+        """
+        base = self.efectos_por_id.get(efecto.effect_id)
+        if base is None:
+            base = self.p["materiales"].get("efecto")
+        if base is None:
+            raise KeyError(
+                f"El efecto '{efecto.nombre}' no esta en los prototipos. "
+                f"Extraelo de un proyecto real con "
+                f"herramientas/extraer_prototipos.py.")
+
+        m = copy.deepcopy(base)
+        for k in ("_usos", "_duracion_us"):
+            m.pop(k, None)
+        m["id"] = nuevo_id()
+
+        if efecto.velocidad is not None:
+            for par in m.get("adjust_params", []):
+                if par.get("name") == "effects_adjust_speed":
+                    par["value"] = efecto.velocidad
+        return m
+
     # -- segmentos -------------------------------------------------------
 
     def _segmento_video(self, M: dict, bloque, material_id: str,
@@ -199,6 +230,28 @@ class EscritorCapCut:
             "track_render_index": indice_pista,
             "volume": volumen,
             "last_nonzero_volume": volumen,
+        })
+        return s
+
+    def _segmento_efecto(self, material_id: str, efecto,
+                         indice_pista: int) -> dict:
+        """
+        El segmento unico de la pista de efecto.
+
+        No lleva extra_material_refs: en el proyecto del que se copio venia
+        con la lista vacia, asi que aqui no se registra ningun auxiliar. Y
+        source_timerange se queda a None: un efecto no lee de ningun archivo,
+        solo ocupa un tramo de la timeline.
+        """
+        s = copy.deepcopy(self.p["segmentos"]["efecto"])
+        s.update({
+            "id": nuevo_id(),
+            "material_id": material_id,
+            "extra_material_refs": [],
+            "source_timerange": None,
+            "target_timerange": {"start": us(efecto.inicio_s),
+                                 "duration": us(efecto.duracion_s)},
+            "track_render_index": indice_pista,
         })
         return s
 
@@ -310,6 +363,20 @@ class EscritorCapCut:
                                "is_default_name": True, "name": "",
                                "segments": segs_texto, "type": "text"})
                 idx_pista += 1
+
+        # --- pista de efecto ---
+        # Detras de los rotulos y delante del audio, que es el orden en que
+        # CapCut las deja cuando el efecto se anade a mano.
+        if edl.efecto and self.p["segmentos"].get("efecto"):
+            mat_e = self._material_efecto(edl.efecto)
+            M.setdefault("video_effects", []).append(mat_e)
+            pistas.append({
+                "attribute": 0, "flag": 0, "id": nuevo_id(),
+                "is_default_name": True, "name": "",
+                "segments": [self._segmento_efecto(
+                    mat_e["id"], edl.efecto, idx_pista)],
+                "type": "effect"})
+            idx_pista += 1
 
         # --- pista de narracion ---
         narracion = Path(edl.narracion)

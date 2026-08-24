@@ -22,6 +22,8 @@ se quedaria congelada minutos y Windows la marcaria como "no responde".
 from __future__ import annotations
 
 import queue
+import subprocess
+import sys
 import threading
 import tkinter as tk
 import webbrowser
@@ -29,6 +31,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from urllib.parse import quote_plus
 
+from . import descargas as desc
 from . import guionista as gui
 from . import perfiles as perf
 from . import proyecto as proy
@@ -37,6 +40,23 @@ from . import voz
 # Busqueda de YouTube. Se deja a la vista para poder cambiarla: hay dias en
 # que el material bueno esta en otro sitio.
 BUSCADOR = "https://www.youtube.com/results?search_query={}"
+
+# Raiz del repositorio: desde aqui se lanza 'python -m montador montar' en un
+# proceso aparte. Ver _montar().
+RAIZ = Path(__file__).resolve().parent.parent
+
+# En Windows evita que el proceso hijo abra una consola que parpadee encima de
+# la ventana. Fuera de Windows vale 0 y no hace nada.
+SIN_CONSOLA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+# Cada cuanto se mira el portapapeles. Medio segundo es lo bastante rapido
+# para que el clip aparezca "solo" nada mas copiar el enlace, y lo bastante
+# lento para no notarse: la comprobacion es leer una cadena y mirarla.
+LATIDO_PORTAPAPELES = 500
+
+# Lo que se ofrece como destino cuando la carpeta no tiene parteN. No es un
+# caso raro: edl.py ya contempla todos los videos sueltos como una sola parte.
+SIN_PARTES = "(la carpeta)"
 
 PISTA_INICIAL = ("Escribe de qué va el vídeo y dale a Enviar. "
                  "A partir de ahí, Claude lleva la conversación.")
@@ -52,6 +72,21 @@ class VentanaGuion:
         self.tarea = None
         self.conversacion: gui.Conversacion | None = None
         self.bloques = 0          # trozos de guion recibidos, para el estado
+
+        # Descargas. Van por su cuenta y no tocan 'trabajando' a proposito:
+        # mientras baja un clip se sigue hablando con Claude y, sobre todo, se
+        # siguen copiando enlaces, que es justo lo que se esta haciendo.
+        self.pendientes: queue.Queue = queue.Queue()
+        self.bajando = 0          # en curso + en cola, para avisar al montar
+        self.ya_bajados: set[str] = set()
+        # en el mismo orden en que se atienden: las descargas van de una en
+        # una, asi que la que termina es siempre la primera de la lista
+        self.urls_en_cola: list[str] = []
+        self.ultimo_copiado = ""
+        self.linea_registro: int | None = None
+        self.texto_bajada = ""
+        self.vigilancia = None
+        self.yt_dlp_listo: bool | None = None   # sin comprobar todavia
 
         self.raiz = tk.Tk()
         self.raiz.title(f"Guion — {self.carpeta.name}")
@@ -69,12 +104,24 @@ class VentanaGuion:
         # el sondeo de la cola queda pendiente: hay que cancelarlo al cerrar o
         # Tk intenta ejecutarlo sobre widgets que ya no existen
         self.tarea = self.raiz.after(120, self._vaciar_cola)
+        # el vigilante del portapapeles late siempre y no hace nada mientras
+        # la casilla este sin marcar: arrancarlo y pararlo con ella dejaria
+        # dos relojes que cancelar en vez de uno
+        self.vigilancia = self.raiz.after(LATIDO_PORTAPAPELES,
+                                          self._vigilar_portapapeles)
         self.raiz.protocol("WM_DELETE_WINDOW", self.cerrar)
 
     def cerrar(self) -> None:
-        if self.tarea is not None:
-            self.raiz.after_cancel(self.tarea)
-            self.tarea = None
+        if self.bajando and not messagebox.askyesno(
+                "Quedan descargas",
+                f"Hay {self.bajando} clip(s) sin terminar de bajar. Si "
+                f"cierras ahora se quedan a medias.\n\nCierro igual?"):
+            return
+        for reloj in ("tarea", "vigilancia"):
+            pendiente = getattr(self, reloj, None)
+            if pendiente is not None:
+                self.raiz.after_cancel(pendiente)
+                setattr(self, reloj, None)
         self.raiz.destroy()
 
     # ----------------------------------------------------------------
@@ -126,6 +173,8 @@ class VentanaGuion:
         self.pestanas.add(self.guion.master, text="Guion")
 
         self.pestanas.add(self._panel_clips(self.pestanas), text="Clips")
+        self.pestanas.add(self._panel_publicacion(self.pestanas),
+                          text="Publicacion")
 
         self.charla.tag_configure("tu", foreground="#1a4f8a",
                                   font=("Segoe UI", 10, "bold"),
@@ -182,6 +231,10 @@ class VentanaGuion:
                                         command=self._guardar)
         self.boton_guardar.grid(row=0, column=2, sticky="e")
 
+        self.boton_montar = ttk.Button(pie, text="Montar en CapCut",
+                                       command=self._montar)
+        self.boton_montar.grid(row=0, column=3, sticky="e", padx=(6, 0))
+
         existente = self.carpeta / "guion.txt"
         if existente.exists():
             self.guion.insert("1.0", existente.read_text(encoding="utf-8"))
@@ -231,14 +284,94 @@ class VentanaGuion:
         self.clips.configure(yscrollcommand=barra_v.set,
                              xscrollcommand=barra_h.set)
 
-        abajo = ttk.Frame(marco, padding=(8, 6, 8, 8))
+        abajo = ttk.Frame(marco, padding=(8, 6, 8, 2))
         abajo.grid(row=2, column=0, sticky="ew")
         ttk.Label(abajo, text="Abrir en el navegador:").pack(side="left",
                                                              padx=(0, 8))
         self.barra_partes = ttk.Frame(abajo)
         self.barra_partes.pack(side="left")
 
+        # ---- descarga ----
+        # Va aqui debajo y no en una pestaña aparte porque es el mismo gesto
+        # seguido: se abren las busquedas, se miran los videos, y el que sirve
+        # se copia. Cambiar de pestaña en medio romperia justo eso.
+        bajar = ttk.Frame(marco, padding=(8, 6, 8, 2))
+        bajar.grid(row=3, column=0, sticky="ew")
+        bajar.columnconfigure(3, weight=1)
+
+        ttk.Label(bajar, text="Descargar a:").grid(row=0, column=0,
+                                                   padx=(0, 6))
+        self.parte_destino = tk.StringVar()
+        self.combo_parte = ttk.Combobox(bajar, textvariable=self.parte_destino,
+                                        state="readonly", width=12)
+        self.combo_parte.grid(row=0, column=1)
+
+        self.escuchando = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bajar, text="Escuchar el portapapeles",
+                        variable=self.escuchando,
+                        command=self._cambiar_escucha).grid(row=0, column=2,
+                                                            padx=(10, 0))
+
+        self.aviso_bajada = ttk.Label(bajar, text="", foreground="#666")
+        self.aviso_bajada.grid(row=0, column=3, sticky="e")
+
+        caja_reg = ttk.Frame(marco)
+        caja_reg.grid(row=4, column=0, sticky="ew", padx=8, pady=(2, 8))
+        caja_reg.columnconfigure(0, weight=1)
+
+        # alto fijo: es un registro de lo que va cayendo, no el contenido de
+        # la pestaña. Lo que manda sigue siendo la lista de busquedas.
+        self.registro = tk.Text(caja_reg, height=6, wrap="none", padx=8,
+                                pady=4, font=("Consolas", 9),
+                                state="disabled", background="#f4f4f4")
+        self.registro.grid(row=0, column=0, sticky="ew")
+        barra_reg = ttk.Scrollbar(caja_reg, orient="vertical",
+                                  command=self.registro.yview)
+        barra_reg.grid(row=0, column=1, sticky="ns")
+        self.registro.configure(yscrollcommand=barra_reg.set)
+
+        self._refrescar_destinos()
         self._pintar_botones_partes()
+        return marco
+
+    def _panel_publicacion(self, padre) -> ttk.Frame:
+        """
+        Los ocho titulos y la descripcion, para pegarlos en YouTube.
+
+        Editable por lo mismo que los clips: de los ocho titulos se elige uno
+        y casi siempre se le cambia una palabra. Lo que se guarda es lo que
+        haya aqui, no lo que dijo Claude.
+        """
+        marco = ttk.Frame(padre)
+        marco.columnconfigure(0, weight=1)
+        marco.rowconfigure(1, weight=1)
+
+        arriba = ttk.Frame(marco, padding=(8, 8, 8, 4))
+        arriba.grid(row=0, column=0, sticky="ew")
+
+        self.boton_publicacion = ttk.Button(
+            arriba, text="Pedir titulos y descripcion a Claude",
+            command=self._pedir_publicacion)
+        self.boton_publicacion.grid(row=0, column=0)
+
+        ttk.Button(arriba, text="Guardar publicacion.txt",
+                   command=self._guardar_publicacion).grid(row=0, column=1,
+                                                           padx=(6, 0))
+
+        caja = ttk.Frame(marco)
+        caja.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        caja.columnconfigure(0, weight=1)
+        caja.rowconfigure(0, weight=1)
+
+        # con wrap: la descripcion son parrafos, no lineas sueltas como las
+        # busquedas
+        self.publicacion = tk.Text(caja, wrap="word", undo=True,
+                                   padx=8, pady=6, font=("Segoe UI", 10))
+        self.publicacion.grid(row=0, column=0, sticky="nsew")
+        barra = ttk.Scrollbar(caja, orient="vertical",
+                              command=self.publicacion.yview)
+        barra.grid(row=0, column=1, sticky="ns")
+        self.publicacion.configure(yscrollcommand=barra.set)
         return marco
 
     def _panel_texto(self, padre, editable: bool) -> tk.Text:
@@ -368,6 +501,19 @@ class VentanaGuion:
     def _decir(self, mensaje: str) -> None:
         self.estado.configure(text=mensaje)
 
+    def _ocupar(self, *botones) -> None:
+        """Tres tareas largas —Claude, la voz, el montaje— y ninguna se solapa."""
+        self.trabajando = True
+        for boton in botones:
+            boton.state(["disabled"])
+        self.barra.start(12)
+
+    def _liberar(self) -> None:
+        self.trabajando = False
+        self.barra.stop()
+        for boton in (self.boton_enviar, self.boton_voz, self.boton_montar):
+            boton.state(["!disabled"])
+
     def _resumen_guion(self) -> str:
         texto = self.guion.get("1.0", "end-1c")
         palabras = len(texto.split())
@@ -492,17 +638,49 @@ class VentanaGuion:
                     self._decir(f"Narrando... {numero} % ({texto})")
 
                 elif clase == "voz-fin":
-                    self.trabajando = False
-                    self.barra.stop()
-                    self.boton_voz.state(["!disabled"])
-                    self.boton_enviar.state(["!disabled"])
+                    self._liberar()
                     self._decir(f"Narracion guardada en {Path(texto).name}")
 
+                elif clase == "montaje":
+                    # las lineas que el CLI ya imprime valen tal cual: estan
+                    # escritas para leerlas
+                    self._escribir_charla(texto, "nota")
+                    self._decir(texto.strip())
+
+                elif clase == "montaje-fin":
+                    self._liberar()
+                    if numero == 0:
+                        self._decir("Borrador montado. Abrelo en CapCut.")
+                    else:
+                        self._decir("El montaje ha fallado.")
+                        messagebox.showerror(
+                            "No ha salido",
+                            f"El montaje ha terminado con error ({numero}).\n\n"
+                            f"Ultima linea:\n{texto}")
+
+                elif clase == "bajada-empieza":
+                    self.texto_bajada = texto
+                    self._registrar(texto, nueva=True)
+
+                elif clase == "bajada":
+                    self._registrar(f"{self.texto_bajada}  {numero:.0f} %",
+                                    nueva=False)
+
+                elif clase == "bajada-fin":
+                    self._acabar_bajada(bool(numero), texto)
+
+                elif clase == "bajada-larga":
+                    self._ofrecer_largo(numero, texto)
+
+                elif clase == "bajada-nota":
+                    self._registrar(texto, nueva=True)
+                    self.aviso_bajada.configure(text="sin yt-dlp")
+
+                elif clase == "yt-dlp":
+                    self._responder_ytdlp(bool(numero), texto)
+
                 elif clase == "error":
-                    self.trabajando = False
-                    self.barra.stop()
-                    self.boton_enviar.state(["!disabled"])
-                    self.boton_voz.state(["!disabled"])
+                    self._liberar()
                     self._decir("Ha fallado.")
                     messagebox.showerror("No ha salido", texto)
         except queue.Empty:
@@ -525,6 +703,12 @@ class VentanaGuion:
                 f"[{cuantas} busquedas en {len(busquedas)} partes "
                 f"-> pestaña Clips]", "nota")
 
+        publicacion, respuesta = gui.extraer_publicacion(respuesta)
+        if publicacion:
+            self._recibir_publicacion(publicacion)
+            self._escribir_charla(
+                "[titulos y descripcion -> pestaña Publicacion]", "nota")
+
         bloques, charla = gui.extraer_guion(respuesta)
 
         if charla:
@@ -537,7 +721,7 @@ class VentanaGuion:
                 f"[{cuantos} de guion, {palabras} palabras -> pestaña Guion]",
                 "nota")
             self._sumar_al_guion(bloques)
-        elif not charla and not busquedas:
+        elif not charla and not busquedas and not publicacion:
             # respuesta rara: mejor ensenarla cruda que tragarsela
             self._escribir_charla(respuesta, "claude")
 
@@ -553,6 +737,8 @@ class VentanaGuion:
         return gui.leer_busquedas(self.clips.get("1.0", "end-1c"))
 
     def _pintar_botones_partes(self) -> None:
+        if getattr(self, "combo_parte", None) is not None:
+            self._refrescar_destinos()
         for hijo in self.barra_partes.winfo_children():
             hijo.destroy()
         for numero in sorted(self._busquedas_actuales()):
@@ -610,6 +796,282 @@ class VentanaGuion:
         donde = ", ".join(sorted(p.parent.name for p in escritos))
         self._decir(f"{cuantas} busquedas guardadas en {donde}.")
         self._pintar_botones_partes()
+
+    # ----------------------------------------------------------------
+    # Descargar los clips
+    # ----------------------------------------------------------------
+
+    def _refrescar_destinos(self) -> None:
+        """
+        Las carpetas parteN que hay ahora mismo en el disco.
+
+        Se releen en vez de guardarse porque la carpeta se toca por fuera:
+        parte5 puede aparecer mientras la ventana esta abierta.
+        """
+        carpetas = [c.name for c in proy.partes_de(self.carpeta)]
+        # sin parteN, el destino es la carpeta a secas: es el mismo caso que
+        # ya contempla edl.py, todos los videos en una sola parte
+        valores = carpetas or [SIN_PARTES]
+        self.combo_parte.configure(values=valores)
+        if self.parte_destino.get() not in valores:
+            self.parte_destino.set(valores[0])
+
+    def _carpeta_destino(self) -> Path:
+        elegida = self.parte_destino.get()
+        return self.carpeta if elegida == SIN_PARTES else self.carpeta / elegida
+
+    def _cambiar_escucha(self) -> None:
+        if not self.escuchando.get():
+            self._decir("Portapapeles: ya no escucho.")
+            self.aviso_bajada.configure(text="")
+            return
+
+        # lo que ya estaba copiado no se baja: se apunta como visto para que
+        # solo cuente lo que se copie a partir de ahora
+        self.ultimo_copiado = self._portapapeles()
+
+        if self.yt_dlp_listo is None:
+            self.aviso_bajada.configure(text="comprobando yt-dlp...")
+            threading.Thread(target=self._comprobar_ytdlp, daemon=True).start()
+        elif not self.yt_dlp_listo:
+            self._responder_ytdlp(False, "")
+            return
+
+        self._decir(f"Copia el enlace de un video y cae en "
+                    f"{self.parte_destino.get()}.")
+
+    def _portapapeles(self) -> str:
+        try:
+            return self.raiz.clipboard_get()
+        except tk.TclError:
+            # vacio, o con algo que no es texto (una imagen). Ninguna de las
+            # dos cosas es un error: es lo normal a media tarde.
+            return ""
+
+    def _vigilar_portapapeles(self) -> None:
+        """
+        El unico gesto que queda: copiar el enlace.
+
+        Se sondea en vez de escuchar un evento porque Windows no avisa a nadie
+        cuando cambia el portapapeles sin registrarse en la cadena del sistema,
+        y eso desde tkinter no se puede.
+        """
+        if self.escuchando.get():
+            copiado = self._portapapeles()
+            if copiado != self.ultimo_copiado:
+                self.ultimo_copiado = copiado
+                enlace = desc.es_enlace(copiado)
+                if enlace:
+                    self._encolar(enlace)
+        self.vigilancia = self.raiz.after(LATIDO_PORTAPAPELES,
+                                          self._vigilar_portapapeles)
+
+    def _encolar(self, url: str) -> None:
+        if url in self.ya_bajados:
+            self._decir("Ese ya estaba.")
+            return
+        if self.yt_dlp_listo is False:
+            return
+
+        self._a_la_cola(url, self._carpeta_destino(), forzar=False)
+
+    def _a_la_cola(self, url: str, destino: Path, forzar: bool) -> None:
+        self.ya_bajados.add(url)
+        self.urls_en_cola.append((url, destino))
+        self.bajando += 1
+        self.pendientes.put((url, destino, forzar))
+
+        self._arrancar_trabajador()
+        self.aviso_bajada.configure(text=f"{self.bajando} en cola")
+
+    def _arrancar_trabajador(self) -> None:
+        if getattr(self, "trabajador", None) and self.trabajador.is_alive():
+            return
+        self.trabajador = threading.Thread(target=self._trabajar_descargas,
+                                           daemon=True)
+        self.trabajador.start()
+
+    def _trabajar_descargas(self) -> None:
+        """
+        Hilo secundario: ni un widget desde aqui.
+
+        De una en una y no en paralelo, y no es por prudencia: bajando cuatro
+        a la vez ninguna termina, el ancho de banda es el mismo, y ademas el
+        numero del archivo se calcula mirando la carpeta —dos descargas
+        simultaneas pedirian el mismo numero y una pisaria a la otra.
+        """
+        while True:
+            url, destino, forzar = self.pendientes.get()
+            ultimo = [-10.0]
+
+            def avanzar(porcentaje: float, linea: str) -> None:
+                # solo de cinco en cinco: cada linea de yt-dlp seria un
+                # mensaje, y la cola se llenaria de repintados inutiles
+                if porcentaje >= 0 and porcentaje - ultimo[0] >= 5:
+                    ultimo[0] = porcentaje
+                    self.cola.put(("bajada", porcentaje, ""))
+
+            self.cola.put(("bajada-empieza", 0, f"bajando   {destino.name}"))
+            try:
+                ruta = desc.descargar(
+                    url, destino, progreso=avanzar,
+                    # aceptado a mano: se baja largo y todo
+                    duracion_maxima=0 if forzar else desc.DURACION_MAXIMA_S)
+                self.cola.put(("bajada-fin", 0,
+                               f"listo     {destino.name}\\{ruta.name}"))
+            except desc.DemasiadoLargo as largo:
+                self.cola.put(("bajada-larga", largo.duracion_s, largo.titulo))
+            except desc.SinYtDlp:
+                self.cola.put(("bajada-fin", 1,
+                               "falta yt-dlp: no se ha podido descargar"))
+            except Exception as exc:
+                # en una sola linea: el registro lleva una por descarga y la
+                # reescribe, y un salto aqui le descuadraria la cuenta
+                razon = " ".join(str(exc).split())[:150]
+                self.cola.put(("bajada-fin", 1, f"fallo     {url} - {razon}"))
+            finally:
+                self.pendientes.task_done()
+
+    def _registrar(self, texto: str, nueva: bool) -> None:
+        """
+        Una linea por descarga, reescrita segun avanza.
+
+        Reescribir en vez de ir anadiendo porque si no, una sola descarga
+        llenaria el registro de veinte lineas con el mismo nombre y otro
+        porcentaje.
+        """
+        self.registro.configure(state="normal")
+        if nueva or self.linea_registro is None:
+            if self.registro.get("1.0", "end-1c"):
+                self.registro.insert("end", "\n")
+            self.linea_registro = int(
+                self.registro.index("end-1c").split(".")[0])
+        self.registro.delete(f"{self.linea_registro}.0",
+                             f"{self.linea_registro}.end")
+        self.registro.insert(f"{self.linea_registro}.0", texto)
+        self.registro.see("end")
+        self.registro.configure(state="disabled")
+
+    def _sacar_de_la_cola(self) -> tuple[str, Path | None]:
+        """La que termina es siempre la primera: se atienden de una en una."""
+        return self.urls_en_cola.pop(0) if self.urls_en_cola else ("", None)
+
+    def _ofrecer_largo(self, duracion: float, titulo: str) -> None:
+        """
+        Un video largo no se descarta solo: se pregunta.
+
+        Un recopilatorio de dos horas puede ser justo el material que quieres
+        -paisajes, vuelos de dron-, pero son gigas para sacar cuatro segundos,
+        y enterarse a mitad de la descarga es tarde.
+        """
+        self.bajando = max(0, self.bajando - 1)
+        url, destino = self._sacar_de_la_cola()
+        cuanto = desc.formato_duracion(duracion)
+        self._registrar(f"largo     {titulo} ({cuanto})", nueva=False)
+        self.aviso_bajada.configure(
+            text=f"{self.bajando} en cola" if self.bajando else "")
+
+        if destino is not None and messagebox.askyesno(
+                "Video largo",
+                f"{titulo}\n\nDura {cuanto}, y de ahi el montaje usa unos "
+                f"segundos. Ocupara bastante en el disco.\n\nLo bajo igual?"):
+            self._a_la_cola(url, destino, forzar=True)
+            return
+
+        self.ya_bajados.discard(url)
+        self._decir(f"Saltado por largo: {titulo}")
+
+    def _acabar_bajada(self, fallo: bool, texto: str) -> None:
+        self.bajando = max(0, self.bajando - 1)
+        url, _ = self._sacar_de_la_cola()
+        self._registrar(texto, nueva=False)
+        self.aviso_bajada.configure(
+            text=f"{self.bajando} en cola" if self.bajando else "")
+        if fallo:
+            # el enlace se olvida para que copiarlo otra vez lo reintente, que
+            # es lo que se hace cuando un video da error a la primera
+            self.ya_bajados.discard(url)
+            self._decir("Una descarga ha fallado. Mira el registro.")
+        else:
+            self._decir(texto.strip())
+
+    # ---- yt-dlp ----
+
+    def _comprobar_ytdlp(self) -> None:
+        """Hilo secundario: arrancar un proceso tarda y congelaria la ventana."""
+        version = desc.version()
+        self.cola.put(("yt-dlp", 1 if version else 0, version))
+
+    def _responder_ytdlp(self, hay: bool, version: str) -> None:
+        self.yt_dlp_listo = hay
+        if hay:
+            self.aviso_bajada.configure(text=f"yt-dlp {version}")
+            return
+
+        self.aviso_bajada.configure(text="sin yt-dlp")
+        if not messagebox.askyesno(
+                "Falta yt-dlp",
+                "Para bajar los videos hace falta yt-dlp, que no esta "
+                "instalado.\n\nSe instala con pip en este mismo Python y "
+                "ocupa poco. El resto del montador funciona igual sin el.\n\n"
+                "Lo instalo?"):
+            self.escuchando.set(False)
+            return
+        self._instalar_ytdlp()
+
+    def _instalar_ytdlp(self) -> None:
+        self._registrar("instalando yt-dlp...", nueva=True)
+        self.aviso_bajada.configure(text="instalando...")
+        threading.Thread(target=self._trabajar_instalacion,
+                         daemon=True).start()
+
+    def _trabajar_instalacion(self) -> None:
+        """Hilo secundario: ni un widget desde aqui."""
+        bien, salida = desc.instalar()
+        if bien:
+            self.cola.put(("yt-dlp", 1, desc.version()))
+        else:
+            # 'nota' y no 'bajada-fin': aqui no ha terminado ninguna descarga,
+            # y descontarla del contador lo dejaria en negativo
+            self.cola.put(("bajada-nota", 1,
+                           f"no se ha podido instalar yt-dlp\n{salida}"))
+
+    # ----------------------------------------------------------------
+    # Publicacion
+    # ----------------------------------------------------------------
+
+    def _pedir_publicacion(self) -> None:
+        if self.trabajando:
+            return
+        if self.conversacion is None:
+            messagebox.showinfo(
+                "Todavia no",
+                "El titulo y la descripcion salen del guion, asi que primero "
+                "hay que escribirlo. Empieza la conversacion en la otra "
+                "pestaña.")
+            return
+        if (self.publicacion.get("1.0", "end-1c").strip()
+                and not messagebox.askyesno(
+                    "Ya hay titulos",
+                    "Se van a sustituir los que hay ahora. Sigo?")):
+            return
+        self._enviar(gui.PEDIR_PUBLICACION)
+
+    def _recibir_publicacion(self, texto: str) -> None:
+        self.publicacion.delete("1.0", "end")
+        self.publicacion.insert("1.0", texto)
+        self.pestanas.select(3)
+
+    def _guardar_publicacion(self) -> None:
+        texto = self.publicacion.get("1.0", "end-1c").strip()
+        if not texto:
+            messagebox.showwarning(
+                "Vacio", "No hay nada que guardar. Pideselo a Claude o "
+                         "escribelo aqui.")
+            return
+
+        ruta = proy.guardar_publicacion(self.carpeta, texto)
+        self._decir(f"Titulos y descripcion guardados en {ruta.name}.")
 
     # ----------------------------------------------------------------
     # Guardado
@@ -683,9 +1145,117 @@ class VentanaGuion:
         except Exception as exc:
             self.cola.put(("error", 0, str(exc)))
 
+    # ----------------------------------------------------------------
+    # Montaje
+    # ----------------------------------------------------------------
+
+    def _montar(self) -> None:
+        """
+        Lo que hasta ahora habia que teclear en la consola:
+
+            python -m montador montar --clips <carpeta> --proyecto <nombre>
+
+        Los dos argumentos ya los sabe la ventana: la carpeta es en la que
+        estamos trabajando y el nombre del borrador se deduce de ella.
+
+        Va en un proceso aparte, no llamando a cmd_montar() aqui mismo, por
+        tres razones: Whisper tarda minutos y se lleva mucha memoria, un fallo
+        suyo no debe llevarse por delante la conversacion, y las lineas de
+        avance que el CLI ya imprime se pintan en la charla sin inventar otro
+        mecanismo.
+        """
+        if self.trabajando:
+            return
+
+        # montar con descargas a medias saldria con menos clips de los que
+        # vas a tener, y ademas con un .part suelto en la carpeta
+        if self.bajando and not messagebox.askyesno(
+                "Quedan descargas",
+                f"Todavia estan bajando {self.bajando} clip(s). Si montas "
+                f"ahora, esos no entran.\n\nMonto igual?"):
+            return
+
+        # el montaje lee el guion.txt de la carpeta, no la pestaña: sin
+        # guardar antes, los rotulos saldrian de una version vieja
+        if self.guion.get("1.0", "end-1c").strip():
+            self._guardar()
+
+        errores, avisos = proy.revisar(self.carpeta)
+        if errores:
+            messagebox.showerror(
+                "Falta material",
+                "Todavia no se puede montar:\n\n  "
+                + "\n  ".join(errores)
+                + f"\n\nTodo eso va dentro de {self.carpeta.name}.")
+            return
+
+        if _capcut_abierto():
+            messagebox.showwarning(
+                "CapCut esta abierto",
+                "Cierra CapCut y vuelve a darle. Mantiene el proyecto en "
+                "memoria y al cerrarse lo reescribe encima del generado.")
+            return
+
+        nombre = proy.nombre_proyecto(self.carpeta)
+        aviso = "Aviso:\n  " + "\n  ".join(avisos) + "\n\n" if avisos else ""
+        if not messagebox.askyesno(
+                "Montar en CapCut",
+                f"Se va a montar el borrador '{nombre}' con lo que hay en "
+                f"{self.carpeta.name}.\n\n{aviso}"
+                f"Si ya existe un borrador con ese nombre, se reemplaza.\n"
+                f"La primera vez tarda varios minutos: transcribir la "
+                f"narracion es lo lento.\n\nSigo?"):
+            return
+
+        self._ocupar(self.boton_montar, self.boton_voz, self.boton_enviar)
+        self._escribir_charla(f"[montando el borrador '{nombre}']", "nota")
+        self._decir("Montando...")
+
+        threading.Thread(target=self._trabajar_montaje, args=(nombre,),
+                         daemon=True).start()
+
+    def _trabajar_montaje(self, nombre: str) -> None:
+        """Hilo secundario: ni un widget desde aqui."""
+        try:
+            proceso = subprocess.Popen(
+                [sys.executable, "-m", "montador", "montar",
+                 "--clips", str(self.carpeta), "--proyecto", nombre],
+                cwd=str(RAIZ),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                bufsize=1, creationflags=SIN_CONSOLA)
+        except Exception as exc:
+            self.cola.put(("error", 0, str(exc)))
+            return
+
+        ultima = ""
+        for linea in proceso.stdout:
+            linea = linea.rstrip()
+            if linea:
+                ultima = linea
+                self.cola.put(("montaje", 0, linea))
+        self.cola.put(("montaje-fin", proceso.wait(), ultima))
+
     def abrir(self) -> Path | None:
         self.raiz.mainloop()
         return self.guardado
+
+
+def _capcut_abierto() -> bool:
+    """
+    Aviso, no comprobacion fiable: si tasklist no esta o falla, se deja pasar.
+
+    Importa porque CapCut abierto tiene el proyecto en memoria y al cerrarse lo
+    reescribe encima del que acabamos de generar.
+    """
+    try:
+        salida = subprocess.run(
+            ["tasklist", "/fi", "imagename eq CapCut.exe"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=SIN_CONSOLA).stdout
+    except Exception:
+        return False
+    return "CapCut.exe" in salida
 
 
 def escribir_guion(carpeta: Path, partes: int = 0,

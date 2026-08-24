@@ -143,6 +143,91 @@ guiones delante, sin comillas y sin explicar para qué sirve cada una. Fuera \
 del bloque dime lo que quieras.
 """
 
+# Lo que se pide para publicar. Tambien en la misma conversacion, y por lo
+# mismo: el titulo sale del gancho del guion y la descripcion de lo que se
+# cuenta dentro, incluidas las fuentes que ya consulto al escribirlo.
+PEDIR_PUBLICACION = """\
+Ya está el guion. Ahora dame con qué lo publico en YouTube.
+
+Ocho títulos. Ocho distintos entre sí, no ocho maneras de decir lo mismo: \
+alguno con la cifra que más impresiona, alguno con la pregunta que el vídeo \
+responde, alguno con el nombre propio por delante. Que quepan en el móvil sin \
+cortarse, así que unos 60 caracteres, y sin mayúsculas gritadas ni signos de \
+exclamación. Nada de prometer lo que el guion no cuenta.
+
+Y la descripción, con estas secciones y en este orden:
+
+**El cuerpo**, cuatro o cinco párrafos, sin ningún encabezado delante. El \
+primero abre con la comparación o la cifra que sostiene el vídeo, concreta y \
+con su número. El segundo cuenta qué es exactamente aquello de lo que se \
+habla, con fechas y datos. El tercero dice cuál es el problema de fondo. El \
+cuarto da el contexto que lo explica, otra vez con cifras. Y se cierra con \
+una sola línea del tipo "Este vídeo explica por qué...". Los dos primeros \
+renglones son lo único que se ve sin desplegar: que enganchen solos y que no \
+repitan el título palabra por palabra.
+
+**📊 LOS DATOS DEL VÍDEO** — las cifras del guion, una por línea, con la \
+etiqueta delante y dos puntos. Sin viñetas ni guiones.
+
+**⚠️ ACLARACIONES** — los matices que impiden que un dato se lea mal: que un \
+precio sea de otro mercado, que una autonomía se mida en otro ciclo, que una \
+cifra sea del fabricante y no independiente. Pon en el encabezado cuántas son \
+("UNA ACLARACIÓN IMPORTANTE", "DOS ACLARACIONES IMPORTANTES"). Si de verdad \
+no hay nada que matizar, quita la sección entera; no la rellenes por rellenar.
+
+**🔗 FUENTES** — las que consultaste al escribir el guion, una por línea, con \
+el medio delante y lo que aporta detrás separado por una raya.
+
+**💬** — una pregunta que se pueda contestar en un comentario, sacada de la \
+tensión del vídeo, y "Te leo en los comentarios."
+
+**🔔** — una línea invitando a suscribirse al canal, con su nombre y su \
+temática tal como los conoces por las reglas de arriba.
+
+**#hashtags** — de ocho a diez, en una sola línea, mezclando el nombre propio \
+del que va el vídeo, el tema, y el del canal al final.
+
+Dos cosas que importan para todo el bloque:
+
+- **Nada de markdown.** YouTube no lo interpreta: los asteriscos salen como \
+asteriscos. Sin negritas, sin cursivas y sin viñetas. Los emoji de los \
+encabezados sí van, tal cual los he escrito.
+- **Sin capítulos con minutajes.** Sabes el orden de las partes pero no en \
+qué segundo entra cada una, y unos minutajes inventados mandan al espectador \
+al sitio equivocado. Esa sección se añade después, fuera de aquí.
+
+Devuélvelo en un bloque con esta forma exacta:
+
+---PUBLICACION---
+TITULOS
+el primer titular
+el segundo titular
+
+DESCRIPCION
+los párrafos del cuerpo
+
+📊 LOS DATOS DEL VÍDEO
+
+Etiqueta: el dato
+
+⚠️ DOS ACLARACIONES IMPORTANTES
+el matiz
+
+🔗 FUENTES
+Medio — qué aporta
+
+💬 la pregunta Te leo en los comentarios.
+
+🔔 la línea de suscripción
+
+#unos #cuantos #hashtags
+---FIN---
+
+Las dos cabeceras, TITULOS y DESCRIPCION, van tal cual y en su propia línea. \
+Los títulos, uno por línea y sin numerar. Fuera del bloque dime lo que \
+quieras.
+"""
+
 # Reglas de estilo usadas cuando no se pasa ningun perfil. El sitio donde el
 # usuario las mantiene es MasterTube\\perfiles; ver perfiles.py.
 ESTILO_POR_DEFECTO = """\
@@ -445,6 +530,39 @@ def extraer_busquedas(respuesta: str) -> tuple[dict[int, list[str]], str]:
 
     sueltas = leer_busquedas(respuesta)
     return (sueltas, "" if sueltas else respuesta)
+
+
+_RE_PUBLICACION = re.compile(
+    r"^[ \t]*-{2,}[ \t]*PUBLICACI[OÓ]N[ \t]*-{2,}[ \t]*$(.*?)"
+    r"^[ \t]*-{2,}[ \t]*FIN[ \t]*-{2,}[ \t]*$",
+    re.S | re.M | re.I)
+
+# Sin cerrar: una descripcion larga es justo lo que se corta a mitad
+_RE_ABRE_PUBLICACION = re.compile(
+    r"^[ \t]*-{2,}[ \t]*PUBLICACI[OÓ]N[ \t]*-{2,}[ \t]*$", re.M | re.I)
+
+
+def extraer_publicacion(respuesta: str) -> tuple[str, str]:
+    """
+    Separa la respuesta en (titulos y descripcion, lo que Claude nos dice).
+
+    Vuelve como texto y no troceado en titulos y descripcion a proposito: es
+    lo que se pega en YouTube tal cual, y trocearlo aqui solo serviria para
+    volver a juntarlo al guardar.
+    """
+    encontrado = _RE_PUBLICACION.search(respuesta)
+    if encontrado:
+        return (encontrado.group(1).strip(),
+                _RE_PUBLICACION.sub("\n", respuesta).strip())
+
+    # igual que con el guion: un bloque abierto y sin cerrar se da por bueno
+    # hasta el final antes que perder la descripcion entera
+    abierto = _RE_ABRE_PUBLICACION.search(respuesta)
+    if abierto:
+        return (respuesta[abierto.end():].strip(),
+                respuesta[:abierto.start()].strip())
+
+    return "", respuesta
 
 
 _RE_OPCION = re.compile(

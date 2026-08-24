@@ -150,6 +150,38 @@ def main():
                 "auxiliares": aux,
             })
 
+    # --- efectos de video ---
+    # No cuelgan de ningun segmento de video: van en su propia pista, como
+    # una capa estirada por encima de todo. Por eso se extraen mirando las
+    # pistas de tipo 'effect' y no los extra_material_refs de un segmento.
+    proto["segmentos"]["efecto"] = None
+    proto["materiales"]["efecto"] = None
+    proto["catalogo_efectos"] = []
+    vistos_e = {}
+    for pista in doc["tracks"]:
+        if pista["type"] != "effect":
+            continue
+        for seg_e in pista["segments"]:
+            cat, mat = idx.get(seg_e["material_id"], (None, None))
+            if cat != "video_effects":
+                continue
+            # el prototipo es el que cubre mas timeline: el que se usa como
+            # capa global, que es el caso que interesa reproducir
+            actual = proto["segmentos"]["efecto"]
+            if actual is None or (seg_e["target_timerange"]["duration"] >
+                                  actual["target_timerange"]["duration"]):
+                proto["segmentos"]["efecto"] = seg_e
+                proto["materiales"]["efecto"] = mat
+            clave = mat.get("effect_id")
+            if clave not in vistos_e:
+                vistos_e[clave] = dict(mat)
+                vistos_e[clave]["_usos"] = 0
+                vistos_e[clave]["_duracion_us"] = \
+                    seg_e["target_timerange"]["duration"]
+            vistos_e[clave]["_usos"] += 1
+    proto["catalogo_efectos"] = sorted(vistos_e.values(),
+                                       key=lambda x: -x["_usos"])
+
     # --- catalogo de transiciones (deduplicado por effect_id) ---
     vistos = {}
     for t in M.get("transitions", []):
@@ -185,6 +217,7 @@ def main():
     print(f"  segmentos      : {sorted(proto['segmentos'])}")
     print(f"  auxiliares     : {sorted(proto['auxiliares'])}")
     print(f"  transiciones   : {len(proto['catalogo_transiciones'])}")
+    print(f"  efectos        : {len(proto['catalogo_efectos'])}")
     print(f"  sonidos        : {len(proto['catalogo_sonidos'])}")
     print(f"  rotulos        : {len(proto['rotulos'])}")
 

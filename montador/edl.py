@@ -53,6 +53,24 @@ class Rotulo:
 
 
 @dataclass
+class Efecto:
+    """
+    Una capa de efecto por encima de todo, en su propia pista.
+
+    No cuelga de ningun bloque: se estira sobre la timeline entera. Va en el
+    EDL y no solo en el escritor porque el EDL es lo que describe el montaje,
+    igual que las transiciones y los sonidos, que tambien son del catalogo de
+    CapCut. Lo que si es cierto es que render.py no puede aplicarlo -es un
+    efecto propietario- y lo ignora.
+    """
+    nombre: str
+    effect_id: str
+    inicio_s: float
+    duracion_s: float
+    velocidad: float | None = None
+
+
+@dataclass
 class EDL:
     duracion_s: float
     fps: float
@@ -62,6 +80,7 @@ class EDL:
     bloques: list[Bloque] = field(default_factory=list)
     sonidos: list[Sonido] = field(default_factory=list)
     rotulos: list[Rotulo] = field(default_factory=list)
+    efecto: Efecto | None = None
 
     def guardar(self, ruta: Path) -> None:
         Path(ruta).write_text(
@@ -77,6 +96,8 @@ class EDL:
             bloques=[Bloque(**b) for b in d["bloques"]],
             sonidos=[Sonido(**s) for s in d["sonidos"]],
             rotulos=[Rotulo(**r) for r in d["rotulos"]],
+            # con .get: los edl.json de antes del efecto se siguen cargando
+            efecto=Efecto(**d["efecto"]) if d.get("efecto") else None,
         )
 
     def resumen(self) -> str:
@@ -92,7 +113,9 @@ class EDL:
             f", una cada {len(self.bloques)/max(con_t,1):.1f} cortes)\n"
             f"  sonidos         : {len(self.sonidos)} "
             f"(uno cada {self.duracion_s/max(len(self.sonidos),1):.1f} s)\n"
-            f"  rotulos         : {len(self.rotulos)}"
+            f"  rotulos         : {len(self.rotulos)}\n"
+            f"  efecto          : "
+            f"{self.efecto.nombre if self.efecto else 'ninguno'}"
         )
 
 
@@ -364,9 +387,20 @@ def construir(duracion_s: float, pausas: list[float], raiz_clips: Path,
                 plantilla=estilo.rotulo.plantilla_por_defecto,
             ))
 
+    # la capa de efecto va de cero al final: es una sola, sin trocear, tal
+    # como esta puesta a mano en el proyecto del que se copio
+    efecto = None
+    if estilo.efecto.activo:
+        efecto = Efecto(nombre=estilo.efecto.nombre,
+                        effect_id=estilo.efecto.effect_id,
+                        inicio_s=0.0,
+                        duracion_s=round(duracion_s, 3),
+                        velocidad=estilo.efecto.velocidad)
+
     return EDL(
         duracion_s=round(duracion_s, 3),
         fps=estilo.fps, ancho=estilo.ancho, alto=estilo.alto,
         narracion=str(narracion),
         bloques=bloques, sonidos=sonidos, rotulos=rotulos,
+        efecto=efecto,
     )

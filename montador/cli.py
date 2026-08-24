@@ -69,7 +69,7 @@ def autodetectar(args) -> None:
     if not getattr(args, "guion", None):
         candidatos = [p for p in raiz.iterdir()
                       if p.is_file() and p.suffix.lower() == ".txt"
-                      and p.stem.lower() not in ("trans", "busquedas")]
+                      and p.stem.lower() not in proy.NO_SON_GUION]
         preferido = [p for p in candidatos if p.stem.lower() == "guion"]
         elegido = (preferido or candidatos or [None])[0]
         if elegido:
@@ -253,7 +253,7 @@ def cmd_voz(args):
 
     guiones = [p for p in carpeta.iterdir()
                if p.is_file() and p.suffix.lower() == ".txt"
-               and p.stem.lower() not in ("trans", "guion_anterior")]
+               and p.stem.lower() not in proy.NO_SON_GUION]
     preferido = [p for p in guiones if p.stem.lower() == "guion"]
     elegido = (preferido or guiones or [None])[0]
     if not elegido:
