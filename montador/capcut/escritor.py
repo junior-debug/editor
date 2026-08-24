@@ -14,7 +14,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-from ..edl import EDL, duracion_video, dimensiones_video
+from ..edl import EDL, duracion_video, dimensiones_video, tiene_audio
 
 US = 1_000_000  # CapCut trabaja en microsegundos
 
@@ -80,7 +80,10 @@ class EscritorCapCut:
             "width": ancho,
             "height": alto,
             "type": "video",
-            "has_audio": True,
+            # lo que traiga el archivo de verdad. Los clips se bajan mudos,
+            # y declarar audio que no existe es describirle a CapCut un
+            # material que no es el que tiene delante.
+            "has_audio": tiene_audio(ruta),
         })
         for k in ("media_path", "intensifies_path", "reverse_path",
                   "reverse_intensifies_path", "cartoon_path"):

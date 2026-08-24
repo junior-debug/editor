@@ -238,9 +238,26 @@ def descargar(url: str, destino: Path, indice: int | None = None,
         "--no-colors",    # los codigos de color ensuciarian el registro
         "--progress",     # --print puede implicar --quiet; esto lo desarma
         "--no-simulate",
-        "-f", (f"bv*[height<={altura_max}]+ba/b[height<={altura_max}]"
-               f"/bv*+ba/b"),
+        # SIN AUDIO: 'bv*' es solo la pista de video, sin '+ba' detras. La
+        # narracion va por su lado, asi que el audio del clip no se usa nunca
+        # -y si viene, hay que silenciarlo a mano en CapCut clip por clip-.
+        # De paso baja bastante menos peso.
+        #
+        # Y **H.264 primero** ('avc1'): pidiendo solo la mejor pista de video,
+        # YouTube sirve AV1 o VP9, que CapCut mueve a tirones o no importa.
+        # H.264 es el que traga sin pensarlo. Si no lo hay, se coge lo que
+        # haya antes que quedarse sin clip.
+        #
+        # Los dos ultimos son el respaldo para cuando no hay pista de video
+        # suelta y solo se ofrece el archivo ya mezclado; ese caso lo deja
+        # mudo despues _quitar_audio().
+        "-f", (f"bv*[height<={altura_max}][vcodec^=avc1]"
+               f"/bv*[height<={altura_max}]/bv*"
+               f"/b[height<={altura_max}]/b"),
         "--merge-output-format", "mp4",
+        # el contenedor, siempre mp4: un .webm suelto en la carpeta es un
+        # clip que CapCut puede rechazar al importar
+        "--remux-video", "mp4",
         "--print", f"after_move:{_MARCA_DESTINO}%(filepath)s",
         "-P", str(destino),
         "-o", plantilla,
@@ -282,6 +299,44 @@ def descargar(url: str, destino: Path, indice: int | None = None,
             raise RuntimeError("la descarga ha terminado pero el archivo no "
                                "aparece en la carpeta")
         ruta = max(candidatos, key=lambda p: p.stat().st_mtime)
+
+    return _quitar_audio(ruta, progreso)
+
+
+def _quitar_audio(ruta: Path, progreso=None) -> Path:
+    """
+    Deja el clip mudo si ha bajado con sonido.
+
+    Con 'bv*' no deberia pasar casi nunca, pero cuando YouTube solo ofrece el
+    archivo ya mezclado, yt-dlp cae al respaldo y trae el audio dentro. Se
+    quita copiando los flujos ('-c copy'), sin recodificar: es cuestion de
+    segundos y no toca la imagen.
+
+    Si algo falla se devuelve el clip tal cual. Un clip con sonido se arregla
+    en CapCut con un clic; perderlo por un fallo de ffmpeg, no.
+    """
+    from .edl import tiene_audio
+
+    if not tiene_audio(ruta):
+        return ruta
+
+    if progreso:
+        progreso(-1.0, "quitando el audio del clip")
+
+    mudo = ruta.with_name(ruta.stem + ".mudo" + ruta.suffix)
+    try:
+        salida = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(ruta),
+             "-c", "copy", "-an", str(mudo)],
+            capture_output=True, text=True, creationflags=SIN_CONSOLA)
+        if salida.returncode != 0 or not mudo.exists():
+            mudo.unlink(missing_ok=True)
+            return ruta
+        ruta.unlink()
+        mudo.rename(ruta)
+    except Exception:
+        mudo.unlink(missing_ok=True)
+        return ruta
     return ruta
 
 

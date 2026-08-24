@@ -258,6 +258,21 @@ normaliza a `watch?v=ID` pelado. Eso último hace dos cosas: **quita el
 `&list=`**, que sin él se bajaría la lista entera, y deja iguales las seis
 formas del mismo vídeo, que es lo que detecta el repetido.
 
+**Los clips bajan mudos y en H.264.** Dos decisiones, cada una por su motivo:
+
+- Sin audio (`bv*`, sin el `+ba`): la narración va por su lado, así que el
+  sonido del clip no se usa nunca — y si viene, hay que silenciarlo a mano en
+  CapCut clip por clip. De paso pesan menos de la mitad. Cuando YouTube solo
+  ofrece el archivo ya mezclado, `_quitar_audio()` lo deja mudo copiando los
+  flujos, sin recodificar.
+- H.264 primero (`vcodec^=avc1`): pidiendo solo la mejor pista de vídeo,
+  YouTube sirve **AV1 o VP9**, que CapCut mueve a tirones o no importa. Si no
+  hay H.264 se coge lo que haya, antes que quedarse sin clip.
+
+Por eso `_material_video()` declara `has_audio` mirando el archivo con
+ffprobe y no fijo a `True` como antes: describirle a CapCut un material que
+no es el que tiene delante no puede acabar bien.
+
 Los archivos van numerados `01_`, `02_` porque `edl.py` lee cada `parteN` con
 `sorted()`: **el nombre del archivo es lo que decide el orden de rotación**.
 `siguiente_indice()` cuenta lo que ya hay en el disco en vez de llevar la

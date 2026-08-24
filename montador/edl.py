@@ -149,6 +149,27 @@ def dimensiones_video(ruta: Path) -> tuple[int, int]:
     return int(w), int(h)
 
 
+def tiene_audio(ruta: Path) -> bool:
+    """
+    Si el archivo trae pista de audio.
+
+    Los clips se bajan mudos (ver descargas.py), pero los que ya estaban en
+    las carpetas de antes si pueden traerla, y el borrador tiene que declarar
+    lo que hay de verdad.
+    """
+    try:
+        salida = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a",
+             "-show_entries", "stream=codec_type",
+             "-of", "csv=p=0", str(ruta)],
+            capture_output=True, text=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # sin saberlo, se declara que si: es lo que se hacia antes de existir
+        # esta comprobacion y no rompe nada
+        return True
+    return "audio" in salida.stdout
+
+
 def descubrir_partes(raiz: Path) -> list[list[Path]]:
     """
     Devuelve los clips agrupados por carpeta parteN, en orden.

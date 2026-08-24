@@ -84,6 +84,7 @@ class VentanaGuion:
         self.urls_en_cola: list[str] = []
         self.ultimo_copiado = ""
         self.linea_registro: int | None = None
+        self.hay_pista = True
         self.texto_bajada = ""
         self.vigilancia = None
         self.yt_dlp_listo: bool | None = None   # sin comprobar todavia
@@ -319,16 +320,26 @@ class VentanaGuion:
         caja_reg.grid(row=4, column=0, sticky="ew", padx=8, pady=(2, 8))
         caja_reg.columnconfigure(0, weight=1)
 
+        ttk.Label(caja_reg, text="Descargas", foreground="#666").grid(
+            row=0, column=0, sticky="w", pady=(0, 2))
+
         # alto fijo: es un registro de lo que va cayendo, no el contenido de
         # la pestaña. Lo que manda sigue siendo la lista de busquedas.
+        #
+        # Sin relieve y con el cursor de flecha **a proposito**: con borde
+        # hundido y cursor de texto parece una caja donde escribir, y el
+        # usuario intento escribir en ella. No se escribe aqui: se lee.
         self.registro = tk.Text(caja_reg, height=6, wrap="none", padx=8,
                                 pady=4, font=("Consolas", 9),
-                                state="disabled", background="#f4f4f4")
-        self.registro.grid(row=0, column=0, sticky="ew")
+                                state="disabled", background="#f4f4f4",
+                                relief="flat", highlightthickness=0,
+                                cursor="arrow", foreground="#333")
+        self.registro.grid(row=1, column=0, sticky="ew")
         barra_reg = ttk.Scrollbar(caja_reg, orient="vertical",
                                   command=self.registro.yview)
-        barra_reg.grid(row=0, column=1, sticky="ns")
+        barra_reg.grid(row=1, column=1, sticky="ns")
         self.registro.configure(yscrollcommand=barra_reg.set)
+        self._pista_registro()
 
         self._refrescar_destinos()
         self._pintar_botones_partes()
@@ -932,6 +943,26 @@ class VentanaGuion:
             finally:
                 self.pendientes.task_done()
 
+    def _pista_registro(self) -> None:
+        """
+        Un registro vacio no explica lo que es. Este dice para que sirve.
+
+        Se borra sola en cuanto cae la primera linea de verdad; 'hay_pista'
+        es lo que evita que quede pegada encima de la primera descarga.
+        """
+        self.hay_pista = True
+        self.registro.configure(state="normal")
+        self.registro.delete("1.0", "end")
+        self.registro.insert(
+            "1.0",
+            "Aqui van apareciendo los clips segun se bajan. No se escribe "
+            "aqui.\n"
+            "Copia el enlace de un video de YouTube y cae solo en la carpeta "
+            "de arriba.")
+        self.registro.tag_add("pista", "1.0", "end")
+        self.registro.tag_configure("pista", foreground="#999")
+        self.registro.configure(state="disabled")
+
     def _registrar(self, texto: str, nueva: bool) -> None:
         """
         Una linea por descarga, reescrita segun avanza.
@@ -941,6 +972,9 @@ class VentanaGuion:
         porcentaje.
         """
         self.registro.configure(state="normal")
+        if self.hay_pista:
+            self.registro.delete("1.0", "end")
+            self.hay_pista = False
         if nueva or self.linea_registro is None:
             if self.registro.get("1.0", "end-1c"):
                 self.registro.insert("end", "\n")
