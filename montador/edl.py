@@ -51,6 +51,11 @@ class Rotulo:
     duracion_s: float
     textos: list[str]
     plantilla: str
+    # Con que hueco de la plantilla se corresponde 'textos'. None = desde el
+    # primero, que es el caso normal de un rotulo de una sola linea. La intro
+    # lo usa para tocar solo la linea del titular y dejar las otras tres tal
+    # como vienen del prototipo.
+    hueco: int | None = None
 
 
 @dataclass
@@ -81,7 +86,7 @@ class EDL:
     bloques: list[Bloque] = field(default_factory=list)
     sonidos: list[Sonido] = field(default_factory=list)
     rotulos: list[Rotulo] = field(default_factory=list)
-    efecto: Efecto | None = None
+    efectos: list[Efecto] = field(default_factory=list)
 
     def guardar(self, ruta: Path) -> None:
         Path(ruta).write_text(
@@ -97,8 +102,10 @@ class EDL:
             bloques=[Bloque(**b) for b in d["bloques"]],
             sonidos=[Sonido(**s) for s in d["sonidos"]],
             rotulos=[Rotulo(**r) for r in d["rotulos"]],
-            # con .get: los edl.json de antes del efecto se siguen cargando
-            efecto=Efecto(**d["efecto"]) if d.get("efecto") else None,
+            # 'efecto' en singular es como se guardaba cuando solo habia uno;
+            # se sigue leyendo para no romper los edl.json ya escritos
+            efectos=[Efecto(**e) for e in d.get("efectos", [])]
+            or ([Efecto(**d["efecto"])] if d.get("efecto") else []),
         )
 
     def resumen(self) -> str:
@@ -115,8 +122,8 @@ class EDL:
             f"  sonidos         : {len(self.sonidos)} "
             f"(uno cada {self.duracion_s/max(len(self.sonidos),1):.1f} s)\n"
             f"  rotulos         : {len(self.rotulos)}\n"
-            f"  efecto          : "
-            f"{self.efecto.nombre if self.efecto else 'ninguno'}"
+            f"  efectos         : "
+            f"{', '.join(e.nombre for e in self.efectos) or 'ninguno'}"
         )
 
 
@@ -207,11 +214,17 @@ MARCA_TXT = re.compile(r"\[TXT:\s*(.+?)\]", re.S)
 #     [PARTE 2]
 MARCA_PARTE = re.compile(r"\[PARTE\s*(\d+)\s*(?::\s*(.*?))?\]", re.S | re.I)
 
+# El titular de la cabecera de noticia con la que arranca el video:
+#     [INTRO: BYD FABRICA MAS CERCA DE EUROPA]
+# No es el primer [TXT: ...]: en los seis proyectos mirados son textos
+# distintos, porque este resume el video entero y aquel un momento suyo.
+MARCA_INTRO = re.compile(r"\[INTRO:\s*(.+?)\]", re.S | re.I)
+
 # Todo lo que es indicacion para el montador y no texto para leer. Se quita
 # antes de narrar y antes de cruzar el guion con la transcripcion: el
 # narrador no lo leyo, asi que no puede estar en lo que se oye.
-MARCAS = re.compile(f"(?:{MARCA_TXT.pattern})|(?:{MARCA_PARTE.pattern})",
-                    re.S | re.I)
+MARCAS = re.compile(f"(?:{MARCA_TXT.pattern})|(?:{MARCA_PARTE.pattern})"
+                    f"|(?:{MARCA_INTRO.pattern})", re.S | re.I)
 
 
 def texto_narrado(guion: str) -> str:
@@ -238,6 +251,12 @@ def palabras_antes_de_cada_marca(guion: str) -> list[int]:
     """
     return [len(tokenizar(texto_narrado(guion[:m.start()])))
             for m in MARCA_TXT.finditer(guion)]
+
+
+def extraer_intro(guion: str) -> str:
+    """El titular de la cabecera, o "" si el guion no lo trae."""
+    encontrado = MARCA_INTRO.search(guion)
+    return encontrado.group(1).strip() if encontrado else ""
 
 
 def extraer_partes(guion: str) -> list[tuple[int, str, int]]:
@@ -581,20 +600,40 @@ def construir(duracion_s: float, pausas: list[float], raiz_clips: Path,
                 plantilla=estilo.rotulo.plantilla_por_defecto,
             ))
 
-    # la capa de efecto va de cero al final: es una sola, sin trocear, tal
+    efectos: list[Efecto] = []
+
+    # la capa de ruido va de cero al final: es una sola, sin trocear, tal
     # como esta puesta a mano en el proyecto del que se copio
-    efecto = None
     if estilo.efecto.activo:
-        efecto = Efecto(nombre=estilo.efecto.nombre,
-                        effect_id=estilo.efecto.effect_id,
-                        inicio_s=0.0,
-                        duracion_s=round(duracion_s, 3),
-                        velocidad=estilo.efecto.velocidad)
+        efectos.append(Efecto(nombre=estilo.efecto.nombre,
+                              effect_id=estilo.efecto.effect_id,
+                              inicio_s=0.0,
+                              duracion_s=round(duracion_s, 3),
+                              velocidad=estilo.efecto.velocidad))
+
+    # --- la cabecera de noticia con la que arranca el video ---
+    # Rotulo y efecto van juntos y duran lo mismo: son una sola cosa, y en
+    # los seis proyectos mirados aparecen siempre a la vez.
+    titular = extraer_intro(guion) if guion else ""
+    if estilo.intro.activa and titular:
+        rotulos.insert(0, Rotulo(
+            inicio_s=0.0,
+            duracion_s=estilo.intro.duracion_s,
+            textos=[titular],
+            plantilla=estilo.intro.plantilla,
+            # solo la linea del titular: las otras tres -BREAKING NEWS,
+            # REPORT FROM ORIENTE AVANZA, NEWS- se quedan como vienen
+            hueco=estilo.intro.hueco_titular,
+        ))
+        efectos.append(Efecto(nombre=estilo.intro.efecto_nombre,
+                              effect_id=estilo.intro.efecto_id,
+                              inicio_s=0.0,
+                              duracion_s=estilo.intro.duracion_s))
 
     return EDL(
         duracion_s=round(duracion_s, 3),
         fps=estilo.fps, ancho=estilo.ancho, alto=estilo.alto,
         narracion=str(narracion),
         bloques=bloques, sonidos=sonidos, rotulos=rotulos,
-        efecto=efecto,
+        efectos=efectos,
     )

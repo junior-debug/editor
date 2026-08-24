@@ -77,9 +77,28 @@ limpia**, igual que los efectos de sonido. Aquí vale la misma regla: los
 identificadores de biblioteca solo estorban cuando el material apunta a un
 archivo del disco del usuario, que era el caso del audio.
 
-De aquel proyecto se copia **solo el ruido**. "Bordes de fuego", el otro
-efecto que hay en él, duraba tres segundos al principio: eso es la entrada de
-ese vídeo concreto, no una regla del canal.
+### La cabecera de entrada
+
+"Bordes de fuego" resultó no ser un capricho de aquel vídeo. Mirando los seis
+últimos proyectos, en **los seis** hay lo mismo puesto a mano en el segundo
+cero: la plantilla `红蓝多行新闻动画planets` durante tres segundos con el efecto
+de fuego encima. Es la cabecera de "última hora" con la que arranca el canal.
+
+La plantilla tiene cuatro líneas y **tres son siempre las mismas** —BREAKING
+NEWS / REPORT FROM ORIENTE AVANZA / NEWS—; solo cambia la segunda, que es el
+titular del vídeo. Esos textos fijos **no están en `config.py`**: salen del
+prototipo, que es de donde hay que sacarlos si algún día cambian. `EstiloIntro`
+solo dice cuál de los cuatro huecos es el variable, y `Rotulo.hueco` es lo que
+permite tocar esa línea dejando las otras tal cual.
+
+El titular lo escribe Claude con la marca `[INTRO: ...]`, y **no vale el primer
+`[TXT: ...]`**: se comprobó en seis proyectos y son textos distintos, porque
+este resume el vídeo entero y aquel un momento suyo. Sin la marca no se monta
+cabecera, así que los guiones de antes siguen igual.
+
+Rótulo y efecto se generan juntos y duran lo mismo, porque son una sola cosa.
+Y las pistas de efecto van **una por efecto**: el proyecto del que se copió
+tenía dos pistas con un segmento cada una, no una pista con dos.
 
 **Ojo con `plantillas/prototipos_9.2.8.json`: ya no sale de un único
 proyecto.** Todo viene de "0817" menos `segmentos.efecto`,

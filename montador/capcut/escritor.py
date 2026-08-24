@@ -275,19 +275,23 @@ class EscritorCapCut:
             mt["id"] = nuevo_id()
             mapa[viejo] = mt["id"]
 
+        # con 'hueco' se toca solo esa linea de la plantilla; sin el, se
+        # rellenan desde la primera, que es el rotulo normal de una linea
+        primero = getattr(rotulo, "hueco", None) or 0
         for i, mt in enumerate(materiales_texto):
-            if i < len(rotulo.textos):
+            if 0 <= i - primero < len(rotulo.textos):
+                texto = rotulo.textos[i - primero]
                 try:
                     contenido = json.loads(mt["content"])
-                    contenido["text"] = rotulo.textos[i]
+                    contenido["text"] = texto
                     # los estilos van por rangos de caracteres
                     for estilo in contenido.get("styles", []):
                         if "range" in estilo:
-                            estilo["range"] = [0, len(rotulo.textos[i])]
+                            estilo["range"] = [0, len(texto)]
                     mt["content"] = json.dumps(contenido, ensure_ascii=False)
                 except (ValueError, KeyError):
-                    mt["content"] = rotulo.textos[i]
-                mt["base_content"] = rotulo.textos[i]
+                    mt["content"] = texto
+                mt["base_content"] = texto
 
         plantilla["id"] = nuevo_id()
         for r in plantilla.get("text_info_resources", []):
@@ -367,17 +371,21 @@ class EscritorCapCut:
                                "segments": segs_texto, "type": "text"})
                 idx_pista += 1
 
-        # --- pista de efecto ---
-        # Detras de los rotulos y delante del audio, que es el orden en que
-        # CapCut las deja cuando el efecto se anade a mano.
-        if edl.efecto and self.p["segmentos"].get("efecto"):
-            mat_e = self._material_efecto(edl.efecto)
+        # --- pistas de efecto ---
+        # Una por efecto, detras de los rotulos y delante del audio: es el
+        # orden y el reparto que deja CapCut cuando se anaden a mano. El
+        # proyecto del que se copio esto tenia dos pistas de efecto con un
+        # segmento cada una, no una pista con dos.
+        for efecto in edl.efectos:
+            if not self.p["segmentos"].get("efecto"):
+                break
+            mat_e = self._material_efecto(efecto)
             M.setdefault("video_effects", []).append(mat_e)
             pistas.append({
                 "attribute": 0, "flag": 0, "id": nuevo_id(),
                 "is_default_name": True, "name": "",
                 "segments": [self._segmento_efecto(
-                    mat_e["id"], edl.efecto, idx_pista)],
+                    mat_e["id"], efecto, idx_pista)],
                 "type": "effect"})
             idx_pista += 1
 

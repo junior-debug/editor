@@ -78,9 +78,9 @@ class EstiloEfecto:
     pista de efecto, de 0 al final, sin trocear. La velocidad la bajo de 0,33
     -el valor de fabrica del efecto- a 0,3, y ese es el numero que se copia.
 
-    'Bordes de fuego', el otro efecto de aquel proyecto, NO se reproduce: solo
-    duraba tres segundos al principio y eso es una entrada concreta de ese
-    video, no una regla del canal.
+    'Bordes de fuego', el otro efecto de aquel proyecto, no va aqui: solo
+    duraba tres segundos al principio y resulto ser parte de la cabecera de
+    entrada, no una capa del video. Vive en EstiloIntro.
     """
     activo: bool = True
     nombre: str = "Ruido negro"
@@ -90,12 +90,36 @@ class EstiloEfecto:
 
 
 @dataclass
+class EstiloIntro:
+    """
+    La cabecera de noticia con la que arrancan todos los videos.
+
+    Sale de mirar los seis ultimos proyectos: en los seis hay, puesta a mano,
+    la misma plantilla en el segundo cero y 'Bordes de fuego' encima durante
+    tres segundos. De las cuatro lineas de la plantilla, tres son siempre las
+    mismas -BREAKING NEWS / REPORT FROM ORIENTE AVANZA / NEWS- y solo cambia
+    la segunda, que es el titular del video.
+
+    Los textos fijos NO estan aqui: salen del prototipo, que es de donde hay
+    que sacarlos si algun dia se cambian. Aqui solo se dice cual de los cuatro
+    huecos es el variable.
+    """
+    activa: bool = True
+    plantilla: str = "红蓝多行新闻动画planets"
+    hueco_titular: int = 1        # el segundo hueco, contando desde cero
+    duracion_s: float = 3.0
+    efecto_nombre: str = "Bordes de fuego"
+    efecto_id: str = "7399466248272235782"
+
+
+@dataclass
 class Estilo:
     corte: EstiloCorte = field(default_factory=EstiloCorte)
     transicion: EstiloTransicion = field(default_factory=EstiloTransicion)
     sonido: EstiloSonido = field(default_factory=EstiloSonido)
     rotulo: EstiloRotulo = field(default_factory=EstiloRotulo)
     efecto: EstiloEfecto = field(default_factory=EstiloEfecto)
+    intro: EstiloIntro = field(default_factory=EstiloIntro)
 
     fps: float = 30.0
     ancho: int = 1920

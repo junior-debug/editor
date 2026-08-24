@@ -108,14 +108,19 @@ paso intermedio que luego vas a reescribir, déjalo fuera de las marcas.
 su propio bloque.
 - Rótulos: entre uno y dos por bloque, en su propia línea dentro del bloque, \
 escritos [TXT: TEXTO DEL RÓTULO], máximo seis palabras y en mayúsculas.
+- En el primerísimo bloque, antes de nada, una línea con el titular de la \
+cabecera: [INTRO: BYD FABRICA MÁS CERCA DE EUROPA]. Es el cartel de "última \
+hora" con el que arranca el vídeo, así que resume el vídeo entero y no un \
+momento suyo: de cuatro a siete palabras, en mayúsculas, con el nombre propio \
+o la cifra que lo sostiene. No repitas con él ningún [TXT: ...].
 - Cuando empieces una parte nueva, abre el bloque con su marca en una línea \
 suelta: [PARTE 2: El muro arancelario]. El número es el de la parte y el \
 título es corto, de tres a cinco palabras, como para un capítulo de YouTube. \
 La intro no lleva marca. Con ella sé en qué segundo entra cada parte, así que \
 va donde de verdad empieza, delante de su primer párrafo.
 
-Esas dos, [TXT: ...] y [PARTE n: ...], son la única sintaxis especial \
-permitida dentro del guion, y ninguna de las dos se lee en voz alta.
+Esas tres, [INTRO: ...], [TXT: ...] y [PARTE n: ...], son la única sintaxis \
+especial permitida dentro del guion, y ninguna se lee en voz alta.
 """
 
 # Lo que se le pide al terminar el guion: que diga que buscar para ilustrarlo.
