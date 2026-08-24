@@ -535,42 +535,6 @@ Se escriben en `capitulos.txt`, en la raíz de la carpeta, listos para pegar
 debajo de la descripción. Sin títulos en las marcas no se genera nada: una
 lista de "Parte 3" no le sirve a nadie.
 
-## La miniatura, en tres capas
-
-`miniatura.py` reproduce el sistema que junior ya seguía a mano con ChatGPT.
-Se dedujo mirando las quince que tiene hechas; las tres que se abrieron
-(catorce, quince y noveno) son la misma receta:
-
-    capa 3   el texto      dos líneas comparando cifras: la de arriba blanca
-                           (la referencia occidental) y la de abajo amarilla
-                           (lo chino), mayúsculas y contorno negro
-    capa 2   el personaje  el mismo asiático de traje oscuro y corbata roja,
-                           recortado, a un lado
-    capa 1   la escena     bandera china tratada en grunge y el sujeto del
-                           vídeo —un coche, un robot, un barco— al otro lado
-
-**Por capas y no de una sola pasada**, aunque el modelo sepa escribir: estas
-miniaturas viven de las cifras —9,58 contra 9,32— y un modelo de imagen las
-escribe mal cada pocas veces. Un decimal cambiado en la miniatura es una
-promesa falsa en la portada del vídeo. Compuesto con Pillow, el texto sale
-siempre exacto y siempre igual, y el cuerpo se busca a la baja hasta que las
-dos líneas caben: `BOLT: 9,58` admite 106 px y una frase larga baja a 46.
-
-**El personaje se genera una vez y se guarda** en `MasterTube\miniatura\`.
-Es lo que hace que las miniaturas del canal se reconozcan entre sí, y además
-no se paga en cada vídeo. Se **describe** en vez de nombrarlo —"un asiático
-que recuerde al tipo de un presidente chino"—, que es como lo pide junior a
-mano y como sale sin tropezar con ninguna política de parecidos.
-
-La escena se pide **sin texto y sin personas**: las dos cosas ya están
-resueltas en otras capas, y pedírselas al modelo solo introduce variaciones.
-
-La clave va en `MasterTube\openai.key` o en `OPENAI_API_KEY`, igual que la de
-ai33.pro, y `.gitignore` cubre `*.key`. **Ojo: la API se paga aparte de
-ChatGPT Plus.** Una cuenta con Plus puede tener la API a cero, y entonces
-devuelve `billing_hard_limit_reached`; por eso ese caso tiene su propia
-excepción (`SinSaldo`) con la explicación, en vez de un HTTP 400 pelado.
-
 ## Verificar cambios
 
 `herramientas/analizar_estilo.py` saca métricas de cualquier
@@ -633,7 +597,14 @@ identificadores de biblioteca.
 - Subir a YouTube desde el montador: con `publicacion.txt` y `capitulos.txt`
   ya generados, lo que falta es la API y autorizar la cuenta una vez. Subir
   siempre en privado o programado, nunca público directo.
-- La miniatura sigue siendo manual.
+- La miniatura sigue siendo manual, y se queda asi: la API de imagenes de
+  OpenAI se paga aparte de ChatGPT Plus y junior prefiere seguir generandolas
+  en el navegador, que ya tiene pagado. Se intento (commit fcbcba7) y se
+  retiro. Si algun dia se retoma: el sistema son tres capas -escena, el mismo
+  personaje recortado siempre, y dos lineas de texto comparando cifras, la de
+  arriba blanca y la de abajo amarilla- y el texto conviene componerlo en
+  local, porque un modelo de imagen escribe mal las cifras cada pocas veces y
+  estas miniaturas viven de ellas.
 
 Resuelto y ya no está aquí: la posición de los rótulos y la entrada de las
 partes, que se estimaban a ojo y ahora salen de cruzar el guion con la
@@ -650,9 +621,9 @@ transcripción (ver arriba).
 - Semilla fija en `config.py`: el mismo material produce siempre el mismo
   montaje. No introducir aleatoriedad sin semilla.
 - Sin dependencias nuevas salvo necesidad real. Hoy solo `faster-whisper`
-  (y tres opcionales: `anthropic`, para el respaldo por API del guionista,
-  `yt-dlp`, para bajar los clips, y `pillow`, para componer la miniatura); el
-  resto es librería estándar + FFmpeg y el CLI de Claude por subproceso.
+  (y dos opcionales: `anthropic`, para el respaldo por API del guionista, y
+  `yt-dlp`, para bajar los clips); el resto es librería estándar + FFmpeg y el
+  CLI de Claude por subproceso.
 - CapCut trabaja en **microsegundos**. Usar el helper `us()`.
 
 ## Estructura
@@ -670,8 +641,6 @@ transcripción (ver arriba).
       voz.py               guion -> narracion.mp3 con la API de ai33.pro
       descargas.py         enlace copiado -> clip numerado dentro de parteN
                            (yt-dlp por subproceso; dependencia opcional)
-      miniatura.py         escena generada + personaje fijo + texto exacto
-                           (OpenAI + pillow; las dos opcionales)
       ui_proyecto.py       ventana de entrada: elegir el video o crear uno
                            nuevo con sus parteN, con lo que ya tiene hecho
       ui_guion.py          ventana (tkinter): chat con Claude, atajos, la
