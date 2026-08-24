@@ -107,8 +107,15 @@ paso intermedio que luego vas a reescribir, déjalo fuera de las marcas.
 - Si en una misma respuesta hay varias partes de guion, envuelve cada una en \
 su propio bloque.
 - Rótulos: entre uno y dos por bloque, en su propia línea dentro del bloque, \
-escritos [TXT: TEXTO DEL RÓTULO], máximo seis palabras y en mayúsculas. Es \
-la única sintaxis especial permitida dentro del guion.
+escritos [TXT: TEXTO DEL RÓTULO], máximo seis palabras y en mayúsculas.
+- Cuando empieces una parte nueva, abre el bloque con su marca en una línea \
+suelta: [PARTE 2: El muro arancelario]. El número es el de la parte y el \
+título es corto, de tres a cinco palabras, como para un capítulo de YouTube. \
+La intro no lleva marca. Con ella sé en qué segundo entra cada parte, así que \
+va donde de verdad empieza, delante de su primer párrafo.
+
+Esas dos, [TXT: ...] y [PARTE n: ...], son la única sintaxis especial \
+permitida dentro del guion, y ninguna de las dos se lee en voz alta.
 """
 
 # Lo que se le pide al terminar el guion: que diga que buscar para ilustrarlo.

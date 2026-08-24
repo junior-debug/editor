@@ -14,6 +14,7 @@ import subprocess
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
+from .alineacion import FIABILIDAD_MINIMA, alinear_guion, tokenizar
 from .config import Estilo, ESTILO
 
 EXTENSIONES_VIDEO = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
@@ -200,6 +201,23 @@ def descubrir_partes(raiz: Path) -> list[list[Path]]:
 
 MARCA_TXT = re.compile(r"\[TXT:\s*(.+?)\]", re.S)
 
+# Donde arranca cada parte del guion. El titulo es opcional y es lo que
+# acaba siendo el nombre del capitulo de YouTube:
+#     [PARTE 2: El muro arancelario]
+#     [PARTE 2]
+MARCA_PARTE = re.compile(r"\[PARTE\s*(\d+)\s*(?::\s*(.*?))?\]", re.S | re.I)
+
+# Todo lo que es indicacion para el montador y no texto para leer. Se quita
+# antes de narrar y antes de cruzar el guion con la transcripcion: el
+# narrador no lo leyo, asi que no puede estar en lo que se oye.
+MARCAS = re.compile(f"(?:{MARCA_TXT.pattern})|(?:{MARCA_PARTE.pattern})",
+                    re.S | re.I)
+
+
+def texto_narrado(guion: str) -> str:
+    """El guion sin ninguna marca: exactamente lo que se locuta."""
+    return MARCAS.sub("", guion)
+
 
 def extraer_marcas(guion: str) -> list[str]:
     """
@@ -209,13 +227,152 @@ def extraer_marcas(guion: str) -> list[str]:
     return [m.group(1).strip() for m in MARCA_TXT.finditer(guion)]
 
 
+def palabras_antes_de_cada_marca(guion: str) -> list[int]:
+    """
+    Cuantas palabras locutadas van antes de cada marca [TXT: ...].
+
+    Se cuenta en palabras y no en caracteres porque es lo unico que sobrevive
+    al camino: el narrador leyo el guion sin las marcas ni las lineas en
+    blanco, asi que las posiciones de caracter ya no valen, pero el orden de
+    las palabras es el mismo.
+    """
+    return [len(tokenizar(texto_narrado(guion[:m.start()])))
+            for m in MARCA_TXT.finditer(guion)]
+
+
+def extraer_partes(guion: str) -> list[tuple[int, str, int]]:
+    """
+    Las marcas [PARTE n: titulo] del guion.
+
+    Devuelve (numero, titulo, palabras_locutadas_antes). El titulo puede
+    venir vacio: la marca sirve igual para saber donde entra la parte, solo
+    que entonces no da nombre de capitulo.
+    """
+    partes = []
+    for m in MARCA_PARTE.finditer(guion):
+        antes = len(tokenizar(texto_narrado(guion[:m.start()])))
+        partes.append((int(m.group(1)), (m.group(2) or "").strip(), antes))
+    return partes
+
+
+def _mapa_del_guion(guion: str, alineacion, duracion_s: float):
+    """El cruce guion-transcripcion, o None si no se puede o no es de fiar."""
+    if alineacion is None or not getattr(alineacion, "palabras", None):
+        return None
+    mapa = alinear_guion(texto_narrado(guion), alineacion.palabras, duracion_s)
+    return mapa if mapa.fiabilidad >= FIABILIDAD_MINIMA else None
+
+
+def entradas_desde_guion(guion: str, alineacion, duracion_s: float,
+                         cuantas: int) -> list[float] | None:
+    """
+    En que segundo entra cada carpeta parteN, segun las marcas del guion.
+
+    Devuelve None si el guion no las lleva o si el cruce no es de fiar, y
+    entonces manda el reparto uniforme de siempre.
+
+    Manda el **numero** de la marca, no su orden de aparicion: [PARTE 3] dice
+    cuando entra la carpeta parte3. Importa porque la primera marca del guion
+    suele ser [PARTE 2] -delante va la intro, que no lleva marca-, y tomarla
+    por la primera carpeta correria todas las demas.
+
+    Las partes del guion y las carpetas no tienen por que coincidir: hoy son
+    cinco partes contra cuatro carpetas. Las carpetas sin marca se reparten
+    en el hueco que queda entre las dos marcas que las rodean.
+    """
+    partes = extraer_partes(guion)
+    mapa = _mapa_del_guion(guion, alineacion, duracion_s)
+    if not partes or mapa is None or cuantas <= 0:
+        return None
+
+    marcado = {n: mapa.segundo_de(antes) for n, _, antes in partes}
+    # la primera carpeta entra en cero pase lo que pase: antes de la parte 1
+    # esta la intro, y durante la intro hay que enseñar algo
+    marcado[1] = 0.0
+
+    entradas: list[float] = []
+    for numero in range(1, cuantas + 1):
+        if numero in marcado:
+            entradas.append(marcado[numero])
+            continue
+        # sin marca: se reparte entre lo ultimo conocido y lo siguiente que
+        # si esta marcado (o el final del video, si no queda ninguna)
+        anterior = entradas[-1] if entradas else 0.0
+        siguientes = [marcado[n] for n in sorted(marcado) if n > numero]
+        siguiente = siguientes[0] if siguientes else duracion_s
+        cuantas_sin = sum(1 for n in range(numero, cuantas + 1)
+                          if n not in marcado
+                          and not any(m < n for m in marcado if m > numero))
+        entradas.append(round(
+            anterior + (siguiente - anterior) / max(cuantas_sin + 1, 2), 2))
+
+    # nunca hacia atras: una entrada que retrocede sacaria clips de una parte
+    # que todavia no ha empezado
+    for i in range(1, len(entradas)):
+        entradas[i] = max(entradas[i], entradas[i - 1])
+    return entradas
+
+
+def capitulos(guion: str, alineacion, duracion_s: float) -> list[tuple[float, str]]:
+    """
+    Los capitulos de YouTube: (segundo, titulo).
+
+    YouTube exige que el primero empiece en 00:00, asi que si la primera
+    marca esta mas adelante se antepone la intro. Sin titulos en las marcas
+    no hay capitulos que valgan: una lista de 'Parte 3' no le sirve a nadie.
+    """
+    partes = sorted(extraer_partes(guion), key=lambda p: p[2])
+    mapa = _mapa_del_guion(guion, alineacion, duracion_s)
+    if not partes or mapa is None:
+        return []
+    if not any(titulo for _, titulo, _ in partes):
+        return []
+
+    lista = []
+    for numero, titulo, antes in partes:
+        lista.append((mapa.segundo_de(antes), titulo or f"Parte {numero}"))
+
+    if lista[0][0] > 1.0:
+        lista.insert(0, (0.0, "Introduccion"))
+    else:
+        lista[0] = (0.0, lista[0][1])
+    return lista
+
+
+def texto_capitulos(lista: list[tuple[float, str]]) -> str:
+    """Los capitulos como se pegan en YouTube: '00:00 Titulo', uno por linea."""
+    filas = []
+    for segundo, titulo in lista:
+        minutos, resto = divmod(int(segundo), 60)
+        horas, minutos = divmod(minutos, 60)
+        marca = (f"{horas}:{minutos:02d}:{resto:02d}" if horas
+                 else f"{minutos:02d}:{resto:02d}")
+        filas.append(f"{marca} {titulo}")
+    return "\n".join(filas)
+
+
 def posiciones_marcas(guion: str, alineacion, duracion_s: float) -> list[float]:
     """
-    Estima en que segundo cae cada marca [TXT: ...] segun su posicion relativa
-    en el guion. Aproximacion por proporcion de caracteres: suficiente para
-    colocar 5-6 rotulos en un video de 13 minutos, y el retoque fino se hace
-    en CapCut.
+    En que segundo cae cada marca [TXT: ...].
+
+    Con la transcripcion delante se cruza el guion con lo que de verdad se
+    oye y sale el segundo real: el rotulo entra cuando se dice la frase que
+    lo lleva, no cuando toca por regla de tres.
+
+    Sin transcripcion -o si el cruce sale mal, que se sabe por la fiabilidad-
+    se vuelve a la estimacion por proporcion de caracteres, que es lo que
+    habia y funcionaba de forma aceptable.
     """
+    mapa = _mapa_del_guion(guion, alineacion, duracion_s)
+    if mapa is not None:
+        return [mapa.segundo_de(n)
+                for n in palabras_antes_de_cada_marca(guion)]
+
+    return _posiciones_por_proporcion(guion, duracion_s)
+
+
+def _posiciones_por_proporcion(guion: str, duracion_s: float) -> list[float]:
+    """El reparto a ojo de siempre: por cuanto texto va delante de la marca."""
     limpio = MARCA_TXT.sub("", guion)
     total = max(len(limpio), 1)
     posiciones = []
@@ -317,15 +474,27 @@ def construir(duracion_s: float, pausas: list[float], raiz_clips: Path,
               narracion: Path, guion: str = "",
               entradas_s: list[float] | None = None,
               estilo: Estilo = ESTILO,
-              catalogo_transiciones: dict | None = None) -> EDL:
+              catalogo_transiciones: dict | None = None,
+              alineacion=None) -> EDL:
+    """
+    'alineacion' es opcional pero cambia donde caen los rotulos: con ella se
+    cruza el guion con lo que se oye y salen en su segundo real. Sin ella se
+    estiman por proporcion de texto, como se venia haciendo.
+    """
 
     rnd = random.Random(estilo.semilla)
     partes = descubrir_partes(raiz_clips)
     if not partes:
         raise RuntimeError(f"No hay clips de video en {raiz_clips}")
 
+    if entradas_s is None and guion:
+        # lo primero, las marcas [PARTE n] del guion: dicen el segundo real
+        # en que se empieza a hablar de cada parte
+        entradas_s = entradas_desde_guion(guion, alineacion, duracion_s,
+                                          len(partes))
+
     if entradas_s is None:
-        # por defecto las partes entran repartidas a lo largo de la narracion
+        # sin marcas, el reparto uniforme de siempre
         entradas_s = [round(duracion_s * i / len(partes), 2)
                       for i in range(len(partes))]
 
@@ -399,10 +568,14 @@ def construir(duracion_s: float, pausas: list[float], raiz_clips: Path,
     rotulos: list[Rotulo] = []
     if guion:
         textos = extraer_marcas(guion)
-        posiciones = posiciones_marcas(guion, None, duracion_s)
+        posiciones = posiciones_marcas(guion, alineacion, duracion_s)
         for texto, pos in zip(textos, posiciones):
+            # una marca al final del guion cae en el ultimo segundo, y el
+            # rotulo se saldria del video. Se adelanta lo justo para que
+            # quepa entero.
+            tope = max(duracion_s - estilo.rotulo.duracion_s, 0.0)
             rotulos.append(Rotulo(
-                inicio_s=pos,
+                inicio_s=round(min(pos, tope), 3),
                 duracion_s=estilo.rotulo.duracion_s,
                 textos=[texto],
                 plantilla=estilo.rotulo.plantilla_por_defecto,

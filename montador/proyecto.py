@@ -27,7 +27,8 @@ ES_PARTE = re.compile(r"parte\s*\d+", re.I)
 # que lo demas que escribimos ahi va excluido por nombre. La lista esta aqui
 # y no repetida en cada sitio porque cuando lo estaba se quedo sin actualizar:
 # 'busquedas' faltaba en la deteccion de 'montador voz'.
-NO_SON_GUION = ("trans", "busquedas", "publicacion", "guion_anterior")
+NO_SON_GUION = ("trans", "busquedas", "publicacion", "capitulos",
+                "guion_anterior")
 
 
 # --------------------------------------------------------------------------
@@ -125,6 +126,19 @@ def guardar_publicacion(destino: Path, texto: str) -> Path:
     guion.txt se acabaria narrando la descripcion de YouTube.
     """
     ruta = destino / "publicacion.txt"
+    ruta.write_text(texto.strip() + "\n", encoding="utf-8")
+    return ruta
+
+
+def guardar_capitulos(destino: Path, texto: str) -> Path:
+    """
+    Los capitulos con su minutaje, listos para pegar bajo la descripcion.
+
+    Van en la raiz y no dentro de una parteN por lo mismo que publicacion.txt:
+    son del video entero. Se escriben al montar porque hasta que no hay audio
+    transcrito no se sabe en que segundo empieza cada parte.
+    """
+    ruta = destino / "capitulos.txt"
     ruta.write_text(texto.strip() + "\n", encoding="utf-8")
     return ruta
 

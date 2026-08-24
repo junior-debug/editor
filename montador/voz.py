@@ -25,7 +25,7 @@ import uuid
 from pathlib import Path
 
 from . import proyecto as proy
-from .edl import MARCA_TXT
+from .edl import texto_narrado
 
 BASE = "https://api.ai33.pro"
 
@@ -144,12 +144,12 @@ def creditos() -> int:
 
 def texto_locutable(guion: str) -> str:
     """
-    Quita las marcas [TXT: ...] del guion.
+    Quita las marcas [TXT: ...] y [PARTE n: ...] del guion.
 
-    Son indicaciones de rotulo para el montador, no texto para leer: si se
-    mandan tal cual, el narrador dice "TXT dos puntos" en mitad de la frase.
+    Son indicaciones para el montador, no texto para leer: si se mandan tal
+    cual, el narrador dice "TXT dos puntos" en mitad de la frase.
     """
-    limpio = MARCA_TXT.sub("", guion)
+    limpio = texto_narrado(guion)
     lineas = [l.strip() for l in limpio.splitlines()]
     return "\n".join(l for l in lineas if l).strip()
 

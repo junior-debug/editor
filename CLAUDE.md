@@ -352,9 +352,9 @@ ilustra ninguna parte, es del vídeo entero. De ahí que su nombre esté en
 Lo que **no** lleva son los capítulos con minutajes, y el encargo se lo dice
 con su motivo: Claude sabe el orden de las partes pero no en qué segundo entra
 cada una, así que los inventaría, y un minutaje inventado manda al espectador
-al sitio equivocado. Eso sale de `trans.json` y es lo mismo que hace falta
-para deducir las entradas de las partes. Cuando se resuelva aquello, esto sale
-casi gratis: la sección se añade al final del bloque y ya está.
+al sitio equivocado. Los pone el montador al montar, en `capitulos.txt`, que
+es cuando ya existe el audio transcrito y se sabe el minutaje de verdad. Se
+pegan debajo de la descripción.
 
 ### Montar sin salir de la ventana
 
@@ -425,6 +425,62 @@ renombra al lado: `revisar()` exige un único audio suelto en la carpeta, y un
 La clave **no está en el repositorio**: se lee de `MasterTube\ai33.key` o de
 la variable de entorno `AI33_API_KEY`. `.gitignore` cubre `*.key`.
 
+## Cruzar el guion con lo que se oye
+
+`trans.json` sabe **cuándo** suena cada palabra; el guion sabe **qué** se dijo
+y dónde van sus marcas. `alinear_guion()` los cruza, y de ahí salen tres cosas
+que antes se estimaban a ojo: la posición real de cada rótulo, el segundo en
+que entra cada `parteN`, y los capítulos de YouTube.
+
+No son el mismo texto —Whisper se come palabras, escribe `35` donde el guion
+pone `35%`, a veces oye otra cosa—, así que se alinean como **dos secuencias**
+con `difflib`: se anclan los tramos que coinciden y se interpolan los huecos.
+Palabra por palabra se desincronizaría en el primer fallo. Sin dependencias:
+`difflib` y `unicodedata` son de la librería estándar.
+
+Dos detalles que no son opcionales:
+
+- **`autojunk=False`.** Con listas largas, `difflib` descarta como ruido los
+  elementos que se repiten mucho, y en español eso es `de`, `la`, `que`:
+  justo las que más anclan. Con autojunk puesto, la alineación se cae.
+- **Se cuenta en palabras, no en caracteres.** El narrador leyó el guion sin
+  las marcas y sin las líneas en blanco, así que las posiciones de carácter
+  ya no valen; el orden de las palabras sí sobrevive.
+
+`MapaGuion.fiabilidad` dice qué proporción salió de una coincidencia real.
+Por debajo de `FIABILIDAD_MINIMA` (55 %) **no se usa** y se vuelve al reparto
+por proporción de texto, que es lo que había. Con material real (vídeo
+catorce) da 84 %; el `ejemplo/` sintético da 0 % —su transcripción son 428
+letras `x`— y por eso el ejemplo no sirve para probar esto, solo el fallback.
+
+### Las dos marcas del guion
+
+`[TXT: ...]` es el rótulo. `[PARTE n: título]` dice dónde empieza cada parte.
+Ninguna se locuta: `texto_narrado()` las quita, y es la única función que lo
+hace —`voz.py` tira de ella— para que no se desincronicen dos limpiezas.
+
+En la marca de parte manda **el número, no el orden de aparición**: `[PARTE 3]`
+dice cuándo entra la carpeta `parte3`. Importa porque la primera marca del
+guion suele ser `[PARTE 2]` —delante va la intro, que no lleva marca— y
+tomarla por la primera carpeta correría todas las demás. La carpeta `parte1`
+entra en cero pase lo que pase: durante la intro hay que enseñar algo.
+
+Las partes del guion y las carpetas no tienen por qué coincidir (hoy son cinco
+contra cuatro). Las carpetas sin marca se reparten en el hueco entre las dos
+marcas que las rodean, y las entradas se fuerzan crecientes: una que
+retrocediera sacaría clips de una parte que aún no ha empezado.
+
+Un guion sin marcas de parte se monta como siempre. Los guiones de antes de
+esto no las llevan y siguen funcionando.
+
+### Los capítulos
+
+Salen al **montar**, no cuando Claude escribe la descripción, y no es un
+capricho de diseño: el minutaje no existe hasta que hay audio transcrito.
+Se escriben en `capitulos.txt`, en la raíz de la carpeta, listos para pegar
+debajo de la descripción. Sin títulos en las marcas no se genera nada: una
+lista de "Parte 3" no le sirve a nadie.
+
 ## Verificar cambios
 
 `herramientas/analizar_estilo.py` saca métricas de cualquier
@@ -482,14 +538,16 @@ identificadores de biblioteca.
 - Recalibrar `config.py` comparando un borrador generado con la versión que
   el usuario retoca a mano. El `montar.bat` ya guarda `edl.json` para poder
   hacer la comparación exacta en vez de estadística.
-- Posición de los rótulos: hoy se estima por proporción de caracteres del
-  guion. Funciona pero es tosco. Alinear el texto del guion con la
-  transcripción de Whisper daría la posición real.
-- Entrada de las partes: por defecto se reparten uniformemente a lo largo de
-  la narración. En el proyecto real fueron 0 / 191 / 467 / 611 s sobre 776.
-  Se puede forzar con `--entradas`, pero deducirlo del guion sería mejor.
 - Los clips entran a escala 1:1, sin recorte ni zoom. Material que no sea
   1920×1080 sale con bandas.
+- Subir a YouTube desde el montador: con `publicacion.txt` y `capitulos.txt`
+  ya generados, lo que falta es la API y autorizar la cuenta una vez. Subir
+  siempre en privado o programado, nunca público directo.
+- La miniatura sigue siendo manual.
+
+Resuelto y ya no está aquí: la posición de los rótulos y la entrada de las
+partes, que se estimaban a ojo y ahora salen de cruzar el guion con la
+transcripción (ver arriba).
 
 ## Convenciones
 
@@ -515,6 +573,7 @@ identificadores de biblioteca.
                            crear parte1..parteN, comprobar que está completa,
                            repartir las busquedas de clips por parteN,
                            guardar titulos y descripcion en publicacion.txt
+                           y los capitulos en capitulos.txt
       guionista.py         guion negociado con Claude por turnos (Conversacion)
                            + modo de un tiron para perfiles sin pasos
       perfiles.py          reglas de guion del usuario (MasterTube\perfiles)
@@ -527,7 +586,8 @@ identificadores de biblioteca.
                            portapapeles que los baja, la pestana Publicacion
                            con los titulos y la descripcion, y el boton que
                            lanza el montaje en un proceso aparte
-      alineacion.py        whisper -> palabras -> pausas (+ registro de DLL de CUDA en Windows)
+      alineacion.py        whisper -> palabras -> pausas, y el cruce del guion
+                           con lo que se oye (+ registro de DLL de CUDA)
       edl.py               plan de cortes, rotacion de clips, transiciones,
                            sonidos, rotulos, capa de efecto
       capcut/escritor.py   EDL -> draft_content.json + draft_meta_info.json

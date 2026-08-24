@@ -86,6 +86,15 @@ def autodetectar(args) -> None:
 
 
 def _alinear(args) -> al.Alineacion:
+    # se guarda en los propios args: el montaje la pide dos veces -para el
+    # EDL y para los capitulos- y transcribir de nuevo serian minutos
+    if getattr(args, "_alineacion", None) is not None:
+        return args._alineacion
+    args._alineacion = _transcribir(args)
+    return args._alineacion
+
+
+def _transcribir(args) -> al.Alineacion:
     if args.transcripcion:
         a = al.Alineacion.cargar(Path(args.transcripcion))
         print(f"  alineacion cargada: {len(a.palabras)} palabras")
@@ -130,7 +139,7 @@ def _construir_edl(args) -> edl_mod.EDL:
         duracion_s=a.duracion_s, pausas=pausas,
         raiz_clips=Path(args.clips), narracion=Path(args.narracion).resolve(),
         guion=guion, entradas_s=entradas, estilo=ESTILO,
-        catalogo_transiciones=catalogo)
+        catalogo_transiciones=catalogo, alineacion=a)
     return e
 
 
@@ -176,6 +185,18 @@ def cmd_montar(args):
     print("     " + e.resumen().replace("\n", "\n     "))
     if args.guardar_edl:
         e.guardar(Path(args.guardar_edl))
+
+    # Capitulos para YouTube. Salen aqui y no cuando Claude escribe la
+    # descripcion porque el minutaje no se sabe hasta que existe el audio:
+    # es la transcripcion la que dice en que segundo empieza cada parte.
+    if args.guion:
+        lista = edl_mod.capitulos(
+            Path(args.guion).read_text(encoding="utf-8"),
+            _alinear(args), e.duracion_s)
+        if lista:
+            ruta = proy.guardar_capitulos(
+                carpeta_video, edl_mod.texto_capitulos(lista))
+            print(f"     {len(lista)} capitulos -> {ruta.name}")
 
     print()
     print("3/3  escribiendo borrador de CapCut")
